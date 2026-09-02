@@ -1,13 +1,13 @@
 # Phase 1 Answers
 
 1. What is Docker?
-Docker is a container tool, it packages application and dependencies together to run consistently on different machines.
+Docker is a platform for building, packaging, and running applications in containers.
 
 2. What are containers?
-Containers are lightweight isolated runtime environments for applications.
+Containers are lightweight and isolated environments that package an application together with its dependencies.
 
 3. Difference between container and virtual machine?
-Containers share host OS kernel, lighter and faster. VM runs full independent operating system, heavy.
+Containers share the host operating system kernel, so they are generally lighter and faster. Virtual machines run a complete guest operating system, so they usually require more resources.
 
-4. What is docker‑compose?
-Docker‑compose is tool to manage multiple containers in one project, configure all services in one yml file.
+4. What is docker-compose?
+Docker Compose is a tool for defining and running multiple containers and services together using a YAML configuration file.
