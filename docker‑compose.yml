@@ -1,18 +1,28 @@
-version: "3.8"
-
 services:
   backend:
     build: ./backend
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=sqlite:///./app.db
+      DATABASE_URL: postgresql+psycopg2://greenhouse:greenhouse@db:5432/greenhouse
+    depends_on:
+      - db
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: greenhouse
+      POSTGRES_PASSWORD: greenhouse
+      POSTGRES_DB: greenhouse
+    ports:
+      - "5432:5432"
     volumes:
-      - ./backend:/app
+      - postgres_data:/var/lib/postgresql/data
 
   frontend:
     build: ./frontend
     ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend:/app
+      - "5173:5173"
+
+volumes:
+  postgres_data:
