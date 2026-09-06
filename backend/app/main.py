@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from scalar_fastapi import add_scalar_reference
 
 from app.api.health import router as health_router
 
@@ -9,6 +10,7 @@ app = FastAPI(
 )
 
 app.include_router(health_router)
+add_scalar_reference(app, route="/scalar")
 
 
 @app.get("/")
