@@ -1,4 +1,7 @@
 import { useEffect, useState } from "react";
+const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000"
+).replace(/\/+$/, "");
 
 type HealthState = "loading" | "healthy" | "degraded" | "unavailable";
 
@@ -11,7 +14,7 @@ export default function HealthStatus() {
 
     async function checkHealth() {
       try {
-        const response = await fetch("http://localhost:8000/health");
+        const response = await fetch(`${API_BASE_URL}/health`);
 
         if (!response.ok) {
           throw new Error("Health request failed");
