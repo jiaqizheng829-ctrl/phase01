@@ -23,3 +23,10 @@ def check_database_connection() -> bool:
         return True
     except Exception:
         return False
+
+def get_session():
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()

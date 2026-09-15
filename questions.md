@@ -100,3 +100,73 @@ The skeleton still needs real greenhouse features, such as device and sensor man
 Later phases can add business rules to the domain layer, use cases to the application layer, and technical implementations to infrastructure. The API layer exposes the new actions, and migrations update the database. The frontend replaces placeholder areas with working features.
 
 This allows us to reuse the existing startup setup, database connection, API documentation, and frontend foundation.
+
+
+
+# Phase 2 — Factory Method Questions
+
+## A. Pattern
+
+### 1. State the intent of Factory Method in plain language. What problem appears when callers scatter `new` constructors (or a growing `if type == ...`) across the application?
+
+**Your Answer**
+
+Factory Method separates the decision of which object to create from the code that uses the object. Without it, API handlers and services can become full of repeated constructors or `if type == ...` branches. It is not a complete application architecture or a reason to create many classes for a very small feature.
+
+### 2. Name the main participants of Factory Method (**product**, **concrete product**, **creator**, **concrete creator**, **client**). For each, give one sentence: what it is responsible for.
+
+**Your Answer**
+
+The product is the common object created by the pattern; here it is a sensor device. A concrete product is one specific result, such as a moisture or light sensor. The creator defines the creation operation. A concrete creator supplies the defaults for one sensor type. The client asks a creator for a product without depending on a concrete sensor class.
+
+### 3. How do you add a **new product variant** when creators are polymorphic (new class + registry entry) versus when creation lives in one shared `if/elif` function? Why does that difference matter for extension?
+
+**Your Answer**
+
+With polymorphic creators, I add a new creator class and register its key. With one shared `if/elif` factory, I must edit the central function every time. The registry approach keeps the creation rules close to each sensor type and makes extension more local.
+
+## B. This phase of the application
+
+### 4. In this lab, what is the **product** and what are the **concrete creators**? Why must the API handler (or sensor service) go through a creator/registry instead of constructing `MoistureSensor` or `LightSensor` itself?
+
+**Your Answer**
+
+The product is the `Sensor` domain object. The concrete creators are `MoistureSensorCreator` and `LightSensorCreator`. The API handler should use the registry and service so it does not need to know how a specific sensor is constructed or which defaults it needs.
+
+### 5. `POST /api/sensors` accepts a short key such as `type: "moisture"` or `type: "light"`, while the stored/returned field is `device_type` (for example `moisture_sensor`). Why are those two fields different? Who decides the stored `device_type` and `default_config`?
+
+**Your Answer**
+
+The short `type` field is an input key chosen for a simple client API, such as `moisture` or `light`. The stored `device_type` is the more specific internal device identity, such as `moisture_sensor`. The selected creator decides both the stored device type and the default configuration.
+
+### 6. Why is there a single `devices` table with `role="sensor"` instead of a dedicated `sensors` table? What later phase does that choice prepare for?
+
+**Your Answer**
+
+A single `devices` table keeps shared device data in one place, while `role="sensor"` identifies sensor rows. This prepares the project for a later phase where actuators can use the same table without rebuilding the database design.
+
+### 7. What should happen when the client posts an **unknown** `type`? Where should that rejection be decided (registry/service vs router constructing a concrete class anyway)?
+
+**Your Answer**
+
+An unknown type should be rejected with a clear client error, such as HTTP 400. The registry or application service should make this decision because it owns the supported creation options. The router should not construct a concrete class as a fallback.
+
+## C. Compare, contrast, and scenarios
+
+### 8. Contrast Factory Method with a **simple factory** (one function full of `if type == ...`). When is the simple factory “good enough,” and why does this phase still want polymorphic creators?
+
+**Your Answer**
+
+A simple factory is one function with `if type == ...` branches. It is good enough when there are only a few stable variants and the feature is unlikely to grow. This phase uses polymorphic creators because moisture and light have different defaults, and later sensor variants can be added through another creator and registry entry.
+
+### 9. Contrast Factory Method with **Abstract Factory** (Phase 3). Factory Method answers which question? Abstract Factory answers which different question? Why is Factory Method enough for Phase 2 sensors?
+
+**Your Answer**
+
+Factory Method answers: “Which concrete sensor should create this product?” Abstract Factory answers: “Which related family of products should be created together?” Factory Method is enough in Phase 2 because the application only needs to choose one sensor type at a time. Phase 3 can use Abstract Factory for related device families.
+
+### 10. A classmate puts SQLAlchemy session commits (or FastAPI request parsing) **inside** a concrete creator. Why is that a trap? Where should persistence and HTTP stay instead?
+
+**Your Answer**
+
+A concrete creator should only create a domain sensor with the correct defaults. Putting database commits inside it mixes creation rules with persistence, and FastAPI parsing mixes it with HTTP details. Persistence belongs in the repository or infrastructure layer, while request parsing and HTTP responses belong in the API layer.
