@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from scalar_fastapi import add_scalar_reference
 
-from app.api.health import router as health_router
+from app.interfaces.api.health import router as health_router
 
 
 app = FastAPI(
