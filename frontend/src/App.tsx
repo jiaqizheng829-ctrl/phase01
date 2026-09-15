@@ -1,70 +1,56 @@
-import { useEffect, useState } from "react";
+import {
+  BrowserRouter,
+  NavLink,
+  Navigate,
+  Route,
+  Routes,
+} from "react-router-dom";
 
-type HealthState = "loading" | "healthy" | "unavailable";
-
-const API_URL = "http://localhost:8000";
-
+import HealthStatus from "./components/HealthStatus";
+import HomePage from "./pages/HomePage";
+import DashboardPage from "./pages/DashboardPage";
 
 export default function App() {
-  const [healthState, setHealthState] = useState<HealthState>("loading");
-
-  useEffect(() => {
-    async function loadHealth() {
-      try {
-        const response = await fetch(`${API_URL}/health`);
-
-        if (!response.ok) {
-          throw new Error("Health check failed");
-        }
-
-        const data: { status: string; db: string } = await response.json();
-
-        setHealthState(
-          data.status === "ok" && data.db === "ok"
-            ? "healthy"
-            : "unavailable",
-        );
-      } catch {
-        setHealthState("unavailable");
-      }
-    }
-
-    void loadHealth();
-  }, []);
-
-  const statusText = {
-    loading: "Checking backend...",
-    healthy: "Backend and database are healthy",
-    unavailable: "Backend is unavailable",
-  }[healthState];
-
-  const statusColor = {
-    loading: "bg-amber-500",
-    healthy: "bg-emerald-500",
-    unavailable: "bg-rose-500",
-  }[healthState];
-
   return (
-    <main className="min-h-screen bg-slate-950 px-6 py-12 text-slate-100">
-      <section className="mx-auto max-w-3xl rounded-2xl border border-slate-800 bg-slate-900 p-8 shadow-xl">
-        <p className="text-sm font-medium text-emerald-400">PHASE 1</p>
-        <h1 className="mt-2 text-3xl font-bold">Greenhouse Dashboard</h1>
-        <p className="mt-3 text-slate-400">
-          Project foundation: React, FastAPI, PostgreSQL, Docker, and Alembic.
-        </p>
+    <BrowserRouter>
+      <div className="min-h-screen bg-slate-950 text-slate-100">
+        <header className="border-b border-slate-700 bg-slate-900">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-4">
+            <span className="text-xl font-bold">Greenhouse</span>
 
-        <div className="mt-8 rounded-xl border border-slate-700 bg-slate-800 p-5">
-          <h2 className="text-lg font-semibold">System health</h2>
-          <div className="mt-3 flex items-center gap-3">
-            <span className={`h-3 w-3 rounded-full ${statusColor}`} />
-            <span>{statusText}</span>
+            <nav aria-label="Main navigation" className="flex gap-4">
+              <NavLink
+                to="/"
+                end
+                className={({ isActive }) =>
+                  isActive ? "text-emerald-400 underline" : "text-slate-300"
+                }
+              >
+                Home
+              </NavLink>
+
+              <NavLink
+                to="/dashboard"
+                className={({ isActive }) =>
+                  isActive ? "text-emerald-400 underline" : "text-slate-300"
+                }
+              >
+                Dashboard
+              </NavLink>
+            </nav>
+
+            <HealthStatus />
           </div>
-        </div>
+        </header>
 
-        <div className="mt-6 rounded-xl border border-dashed border-slate-700 p-5 text-slate-400">
-          Dashboard features will be added in later phases.
-        </div>
-      </section>
-    </main>
+        <main className="mx-auto max-w-6xl px-6 py-10">
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </main>
+      </div>
+    </BrowserRouter>
   );
 }
