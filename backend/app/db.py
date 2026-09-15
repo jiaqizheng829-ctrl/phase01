@@ -1,25 +1,7 @@
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
+"""Compatibility imports for database access."""
 
-from app.config import settings
-
-
-engine = create_engine(
-    settings.database_url,
-    pool_pre_ping=True,
+from app.infrastructure.db import (
+    SessionLocal,
+    check_database_connection,
+    engine,
 )
-
-SessionLocal = sessionmaker(
-    bind=engine,
-    autocommit=False,
-    autoflush=False,
-)
-
-
-def check_database_connection() -> bool:
-    try:
-        with engine.connect() as connection:
-            connection.execute(text("SELECT 1"))
-        return True
-    except Exception:
-        return False
