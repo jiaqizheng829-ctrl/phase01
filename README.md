@@ -120,3 +120,12 @@ The answers to the Phase 1 skeleton questions are in questions.md.
 
 End-to-end runtime verification is pending.
 The commands and expected results above still need to be checked on a running system.
+
+## Reference
+
+I compared my Phase 1 implementation with the course example and used it
+to guide corrections to the backend layers, health endpoint, and API
+documentation. Parts of these corrections were adapted from the example.
+
+Course example:
+https://github.com/xamk-mire/DesignPatterns-Example-Project/tree/main/Example-project
