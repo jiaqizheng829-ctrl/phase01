@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import DevicesSection from "../components/devices/DevicesSection";
 
 import {
   createSensor,
@@ -61,6 +62,7 @@ export default function DashboardPage() {
           Greenhouse devices and controls.
         </p>
       </header>
+      <DevicesSection onProvisioned={() => void loadSensors()} />
 
       <section
         id="sensors"

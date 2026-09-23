@@ -13,6 +13,7 @@ class DeviceRow(Base):
     __tablename__ = "devices"
     __table_args__ = (
         Index("ix_devices_role", "role"),
+        Index("ix_devices_family", "device_family"),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -20,13 +21,24 @@ class DeviceRow(Base):
         primary_key=True,
         server_default=text("gen_random_uuid()"),
     )
-    device_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    device_type: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+    )
     role: Mapped[str] = mapped_column(
         String(32),
         nullable=False,
         server_default=text("'sensor'"),
     )
-    display_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    device_family: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        server_default=text("'simulation'"),
+    )
+    display_name: Mapped[str] = mapped_column(
+        String(128),
+        nullable=False,
+    )
     default_config: Mapped[dict] = mapped_column(
         JSONB,
         nullable=False,
