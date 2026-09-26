@@ -1,3 +1,15 @@
+# Phase 3 — Abstract Factory
+
+- [Phase 3 questions and answers](phases/phase-03/questions.md)
+- [Abstract Factory implementation notes](docs/patterns/abstract-factory.md)
+
+Phase 3 answers use the provided questions.md template and its original Your Answer fields.
+
+---
+
+
+
+
 # Greenhouse Dashboard — Phase 1
 
 A basic three-tier application using React, FastAPI, and PostgreSQL.
