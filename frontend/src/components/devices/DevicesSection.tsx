@@ -1,24 +1,39 @@
 import { useEffect, useState } from "react";
 
 import {
+  assignDeviceZone,
   getDevices,
   provisionDevices,
   type DeviceDto,
   type DeviceFamily,
 } from "../../api/devices";
+import {
+  getLocationConfig,
+  getLocations,
+  type LocationConfig,
+} from "../../api/locations";
 import DeviceFamilySwitcher from "./DeviceFamilySwitcher";
 import DeviceList from "./DeviceList";
 
 type Props = {
   onProvisioned?: () => void;
+  refreshKey?: number;
+  onAssignmentChanged?: () => void;
 };
 
-export default function DevicesSection({ onProvisioned }: Props) {
+export default function DevicesSection({
+  onProvisioned,
+  refreshKey = 0,
+  onAssignmentChanged,
+}: Props) {
   const [family, setFamily] = useState<DeviceFamily>("simulation");
   const [devices, setDevices] = useState<DeviceDto[]>([]);
+  const [configurations, setConfigurations] = useState<LocationConfig[]>([]);
   const [loading, setLoading] = useState(true);
+  const [assignmentsLoading, setAssignmentsLoading] = useState(true);
   const [provisioning, setProvisioning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [zoneError, setZoneError] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
 
@@ -26,7 +41,7 @@ export default function DevicesSection({ onProvisioned }: Props) {
     const controller = new AbortController();
 
     setLoading(true);
-    setDevices([]);
+    setError(null);
 
     async function load() {
       try {
@@ -39,9 +54,13 @@ export default function DevicesSection({ onProvisioned }: Props) {
         if (!controller.signal.aborted) {
           setDevices(result);
         }
-      } catch {
+      } catch (caught) {
         if (!controller.signal.aborted) {
-          setError("Could not load devices. Please try again.");
+          setError(
+            caught instanceof Error
+              ? caught.message
+              : "Could not load devices.",
+          );
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -51,9 +70,43 @@ export default function DevicesSection({ onProvisioned }: Props) {
     }
 
     void load();
-
     return () => controller.abort();
-  }, [family, reload]);
+  }, [family, reload, refreshKey]);
+
+  useEffect(() => {
+    let active = true;
+
+    setAssignmentsLoading(true);
+    setZoneError("");
+
+    async function loadZones() {
+      try {
+        const locations = await getLocations();
+        const configs = await Promise.all(
+          locations.map((location) => getLocationConfig(location.id)),
+        );
+
+        if (active) setConfigurations(configs);
+      } catch (caught) {
+        if (active) {
+          setConfigurations([]);
+          setZoneError(
+            caught instanceof Error
+              ? caught.message
+              : "Could not load zones. Click Refresh to retry.",
+          );
+        }
+      } finally {
+        if (active) setAssignmentsLoading(false);
+      }
+    }
+
+    void loadZones();
+
+    return () => {
+      active = false;
+    };
+  }, [reload, refreshKey]);
 
   function changeFamily(nextFamily: DeviceFamily) {
     setDevices([]);
@@ -76,7 +129,6 @@ export default function DevicesSection({ onProvisioned }: Props) {
 
     try {
       const created = await provisionDevices(family);
-
       setNotice(
         `Created ${created.length} devices in the ${family} family.`,
       );
@@ -89,6 +141,18 @@ export default function DevicesSection({ onProvisioned }: Props) {
     } finally {
       setProvisioning(false);
     }
+  }
+
+  async function handleAssign(deviceId: string, zoneId: string | null) {
+    const updated = await assignDeviceZone(deviceId, zoneId);
+
+    setDevices((current) =>
+      current.map((device) =>
+        device.id === updated.id ? updated : device,
+      ),
+    );
+
+    onAssignmentChanged?.();
   }
 
   return (
@@ -140,11 +204,14 @@ export default function DevicesSection({ onProvisioned }: Props) {
       )}
 
       {error && (
-        <p
-          role="alert"
-          className="mt-4 rounded-lg bg-red-950 p-3 text-red-300"
-        >
+        <p role="alert" className="mt-4 rounded-lg bg-red-950 p-3 text-red-300">
           {error}
+        </p>
+      )}
+
+      {zoneError && (
+        <p role="alert" className="mt-4 text-red-300">
+          {zoneError}
         </p>
       )}
 
@@ -153,7 +220,16 @@ export default function DevicesSection({ onProvisioned }: Props) {
           Loading devices...
         </p>
       ) : (
-        !error && <DeviceList devices={devices} />
+        !error && (
+          <DeviceList
+            devices={devices}
+            configurations={configurations}
+            assignmentsLoading={
+              assignmentsLoading || Boolean(zoneError) || provisioning
+            }
+            onAssign={handleAssign}
+          />
+        )
       )}
     </section>
   );

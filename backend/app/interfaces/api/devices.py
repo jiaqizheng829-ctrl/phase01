@@ -1,3 +1,14 @@
+from uuid import UUID
+
+from app.application.devices.dto import ZoneAssignmentRequest
+from app.application.locations.zone_assignment_service import (
+    ZoneAssignmentService,
+)
+from app.infrastructure.zone_assignment_repository import (
+    AssignmentNotFoundError,
+    ZoneAssignmentRepository,
+)
+
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -57,3 +68,23 @@ def provision_devices(
         ) from error
 
     return [to_device_dto(device) for device in devices]
+
+def get_assignment_service(
+    session: Session = Depends(get_session),
+) -> ZoneAssignmentService:
+    return ZoneAssignmentService(ZoneAssignmentRepository(session))
+
+
+@router.patch("/{id}/zone", response_model=DeviceDto)
+def assign_device_zone(
+    id: UUID,
+    request: ZoneAssignmentRequest,
+    service: ZoneAssignmentService = Depends(get_assignment_service),
+) -> DeviceDto:
+    try:
+        return service.assign(id, request.zone_id)
+    except AssignmentNotFoundError as error:
+        raise HTTPException(
+            status_code=404,
+            detail=str(error),
+        ) from error

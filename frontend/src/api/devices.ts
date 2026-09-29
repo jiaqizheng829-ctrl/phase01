@@ -11,7 +11,31 @@ export type DeviceDto = {
   device_family: DeviceFamily;
   display_name: string;
   default_config: Record<string, unknown>;
+  zone_id: string | null;
+  location_id: string | null;
 };
+
+async function checkResponse(response: Response): Promise<void> {
+  if (response.ok) return;
+
+  let message = `Request failed (${response.status}).`;
+
+  try {
+    const body = await response.json();
+
+    if (typeof body.detail === "string") {
+      message = body.detail;
+    } else if (Array.isArray(body.detail)) {
+      message = body.detail
+        .map((item: { msg: string }) => item.msg)
+        .join("; ");
+    }
+  } catch {
+    // Keep the fallback message if the response is not JSON.
+  }
+
+  throw new Error(message);
+}
 
 export async function getDevices(
   family: DeviceFamily,
@@ -29,10 +53,7 @@ export async function getDevices(
     { signal },
   );
 
-  if (!response.ok) {
-    throw new Error("Could not load devices.");
-  }
-
+  await checkResponse(response);
   return response.json() as Promise<DeviceDto[]>;
 }
 
@@ -46,9 +67,23 @@ export async function provisionDevices(
     { method: "POST" },
   );
 
-  if (!response.ok) {
-    throw new Error("Could not provision the device kit.");
-  }
-
+  await checkResponse(response);
   return response.json() as Promise<DeviceDto[]>;
+}
+
+export async function assignDeviceZone(
+  deviceId: string,
+  zoneId: string | null,
+): Promise<DeviceDto> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/devices/${encodeURIComponent(deviceId)}/zone`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ zone_id: zoneId }),
+    },
+  );
+
+  await checkResponse(response);
+  return response.json() as Promise<DeviceDto>;
 }

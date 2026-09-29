@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import DevicesSection from "../components/devices/DevicesSection";
-
+import ConfigurationSection from "../components/config/ConfigurationSection";
 import {
   createSensor,
   getSensors,
@@ -8,7 +8,6 @@ import {
 } from "../api/sensors";
 
 const laterSections = [
-  { id: "configuration", title: "Configuration" },
   { id: "automation", title: "Automation" },
   { id: "overview", title: "Overview" },
   { id: "controls", title: "Controls" },
@@ -16,10 +15,15 @@ const laterSections = [
 ];
 
 export default function DashboardPage() {
+  const [configurationRefresh, setConfigurationRefresh] = useState(0);
   const [sensors, setSensors] = useState<Sensor[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  function refreshConfiguration() {
+    setConfigurationRefresh((current) => current + 1);
+  }
 
   async function loadSensors() {
     setLoading(true);
@@ -44,12 +48,18 @@ export default function DashboardPage() {
 
     try {
       const sensor = await createSensor({ type });
-      setSensors((currentSensors) => [...currentSensors, sensor]);
+      setSensors((current) => [...current, sensor]);
+      refreshConfiguration();
     } catch {
       setError("Could not create the sensor.");
     } finally {
       setCreating(null);
     }
+  }
+
+  function handleProvisioned() {
+    void loadSensors();
+    refreshConfiguration();
   }
 
   return (
@@ -59,10 +69,15 @@ export default function DashboardPage() {
           Dashboard
         </h1>
         <p className="mt-2 text-slate-400">
-          Greenhouse devices and controls.
+          Greenhouse devices, locations and controls.
         </p>
       </header>
-      <DevicesSection onProvisioned={() => void loadSensors()} />
+
+      <DevicesSection
+        onProvisioned={handleProvisioned}
+        refreshKey={configurationRefresh}
+        onAssignmentChanged={refreshConfiguration}
+      />
 
       <section
         id="sensors"
@@ -70,20 +85,24 @@ export default function DashboardPage() {
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-xl font-semibold text-slate-100">Sensors</h2>
+            <h2 className="text-xl font-semibold text-slate-100">
+              Sensors
+            </h2>
             <p className="mt-1 text-sm text-slate-400">
               Create and view greenhouse sensors.
             </p>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => void handleCreate("moisture")}
               disabled={creating !== null}
               className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
-              {creating === "moisture" ? "Creating..." : "Add moisture sensor"}
+              {creating === "moisture"
+                ? "Creating..."
+                : "Add moisture sensor"}
             </button>
 
             <button
@@ -102,7 +121,10 @@ export default function DashboardPage() {
         )}
 
         {error && (
-          <p className="mt-5 rounded-lg bg-red-950 p-3 text-red-300">
+          <p
+            role="alert"
+            className="mt-5 rounded-lg bg-red-950 p-3 text-red-300"
+          >
             {error}
           </p>
         )}
@@ -134,6 +156,11 @@ export default function DashboardPage() {
           </ul>
         )}
       </section>
+
+      <ConfigurationSection
+        refreshKey={configurationRefresh}
+        onChanged={refreshConfiguration}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {laterSections.map((section) => (

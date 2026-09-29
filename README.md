@@ -1,143 +1,185 @@
-# Phase 3 — Abstract Factory
+# Greenhouse Dashboard — Phase 4: Builder
 
-- [Phase 3 questions and answers](phases/phase-03/questions.md)
-- [Abstract Factory implementation notes](docs/patterns/abstract-factory.md)
+A smart greenhouse coursework project using React, FastAPI, and PostgreSQL.
 
-Phase 3 answers use the provided questions.md template and its original Your Answer fields.
+## Phase 4 submission
 
----
+- [Phase 4 questions and answers](phases/phase-04/questions.md)
+- [Builder implementation notes](docs/patterns/builder.md)
 
+Phase 4 answers use the provided questions.md template and its original Your Answer fields.
 
+## Features
 
+- Create a location with one or more zones using Builder.
+- List saved locations and open their configurations.
+- Delete locations while keeping their devices.
+- Add and edit zones, including names, moisture thresholds, and schedules.
+- Delete zones while keeping at least one zone per location.
+- Assign existing devices to zones or clear their assignments.
+- View the devices assigned to each zone.
+- Manage configurations through the dashboard.
+- Select device zones from all saved locations, grouped by location.
 
-# Greenhouse Dashboard — Phase 1
+Moisture thresholds use values between 0 and 1. The low value must be strictly less than the high value.
 
-A basic three-tier application using React, FastAPI, and PostgreSQL.
-Phase 1 sets up the project foundation without business tables or design patterns.
+Device assignment updates zone_id and location_id together. Deleting a zone or location clears the affected assignments without deleting devices.
 
 ## Requirements
 
-- Docker Desktop installed and its engine running
-- Ports 5173, 8000, and 5432 available
+- Docker Desktop installed and its engine running.
+- Ports 5173, 8000, and 5432 available.
+
+Run the commands below from the project root.
 
 ## Start the application
 
-Download or clone this repository. Open a terminal in the project root,
-the folder containing docker-compose.yml.
+This project contains both compose.yml and docker-compose.yml. The commands below explicitly use compose.yml.
 
-Build and start the three services:
-
-```bash
-docker compose up -d --build
+```powershell
+docker compose -f compose.yml up -d --build
+docker compose -f compose.yml ps
 ```
 
-Check their status:
+The backend startup command applies migrations automatically before starting the API.
 
-```bash
-docker compose ps
+Check the database revision:
+
+```powershell
+docker compose -f compose.yml exec backend alembic current
 ```
 
-Wait for PostgreSQL to be ready. Then apply the baseline migration:
-
-```bash
-docker compose exec backend alembic upgrade head
-```
-
-Check the database migration version:
-
-```bash
-docker compose exec backend alembic current
-```
-
-The expected revision is `001_baseline`.
+The Phase 4 revision is `16f6a0abd449 (head)`.
 
 ## Open the application
 
-- Frontend: http://localhost:5173
-- Backend: http://localhost:8000
-- Health check: http://localhost:8000/health
-- Scalar API documentation: http://localhost:8000/scalar
-- OpenAPI JSON: http://localhost:8000/openapi.json
+- [Dashboard](http://localhost:5173/dashboard)
+- [Health check](http://localhost:8000/health)
+- [Scalar API documentation](http://localhost:8000/scalar)
+- [OpenAPI JSON](http://localhost:8000/openapi.json)
 
-The default `/docs` and `/redoc` pages are disabled.
-
-## Verify the application
-
-When the backend can connect to PostgreSQL, `/health` should return:
+The health check should return:
 
 ```json
-{
-  "status": "ok",
-  "db": "ok"
-}
+{"status":"ok","db":"ok"}
 ```
 
-The frontend should display:
+## Using the configuration UI
 
-```text
-Backend and database are healthy
+1. Open Configuration and click New location.
+2. Enter a location name.
+3. Add one or more zones to the draft list.
+4. Click Create location.
+5. Select a saved location to manage its zones.
+
+The location list reloads from the API after a page refresh. Creating a new location keeps existing locations.
+
+Device cards have an Assigned zone selector. Options show `Location name — Zone name`. Select Unassigned to clear an assignment.
+
+Deleting a location requires confirmation. The last zone in a location cannot be deleted.
+
+Schedule values are entered as JSON objects. An empty schedule is `{}`.
+
+## API endpoints
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/api/locations/config` | Create a location and zones |
+| GET | `/api/locations` | List locations, newest first |
+| GET | `/api/locations/{location_id}/config` | Read a configuration |
+| DELETE | `/api/locations/{location_id}` | Delete a location |
+| POST | `/api/locations/{location_id}/zones` | Add a zone |
+| PATCH | `/api/locations/{location_id}/zones/{zone_id}` | Edit a zone |
+| DELETE | `/api/locations/{location_id}/zones/{zone_id}` | Delete a zone |
+| PATCH | `/api/devices/{id}/zone` | Assign or unassign a device |
+| GET | `/api/locations/{location_id}/zones/{zone_id}/devices` | List devices in a zone |
+
+The Builder is used for new configurations. Saved-zone management and device assignment use separate operations.
+
+## Run backend tests
+
+API tests require a separate database named `greenhouse_phase3_test`. The name is retained for compatibility with the existing Phase 3 tests.
+
+Create it once if it does not already exist:
+
+```powershell
+docker compose -f compose.yml exec db createdb -U greenhouse greenhouse_phase3_test
 ```
 
-Check that the Scalar page loads and lists the health endpoint.
+Apply migrations to the test database:
 
-## Environment configuration
+```powershell
+docker compose -f compose.yml exec -e DATABASE_URL=postgresql+psycopg2://greenhouse:greenhouse@db:5432/greenhouse_phase3_test backend alembic upgrade head
+```
 
-Docker Compose supplies the database connection settings to the backend.
-A separate .env file is not required for the current Docker setup.
+Run all backend tests:
 
-The root .env.example contains example settings for running the backend
-directly on the host computer. It is not automatically loaded from the
-project root when the backend is started from another directory.
+```powershell
+docker compose -f compose.yml exec -e TEST_DATABASE_URL=postgresql+psycopg2://greenhouse:greenhouse@db:5432/greenhouse_phase3_test backend python -m pytest -q
+```
 
-The sample credentials are for local coursework only.
+API tests roll back their changes after each test. Without TEST_DATABASE_URL, the API tests are skipped.
 
 ## Frontend checks
 
-Build the frontend:
-
-```bash
-docker compose exec frontend npm run build
+```powershell
+docker compose -f compose.yml exec frontend npm run build
 ```
 
-Run TypeScript checking separately:
+The build script runs TypeScript checking and the Vite production build.
 
-```bash
-docker compose exec frontend npx tsc --noEmit
-```
+## Verification
+
+During development:
+
+- All 35 backend tests passed before the final DTO configuration cleanup.
+- The frontend TypeScript check and production build passed.
+- Migrations were applied successfully to a newly created empty test database.
+- Manual checks covered location creation, listing and deletion; zone creation, editing and deletion; invalid thresholds; last-zone protection; device assignment and cancellation; and assignment cleanup after deletion.
+- Dashboard checks covered configuration display, creating a location, device assignment, cross-location selection, and location deletion with device retention.
+
+## Environment configuration
+
+Docker Compose provides the database connection settings. A separate .env file is not required for this Docker setup.
+
+The root .env.example contains example settings for running the backend directly on the host.
+
+The sample credentials are for local coursework.
 
 ## Troubleshooting
 
-If a service fails, inspect its logs:
+Inspect service logs:
 
-```bash
-docker compose logs backend db frontend
+```powershell
+docker compose -f compose.yml logs backend db frontend
 ```
 
-If Docker reports that it cannot connect to the engine, check Docker Desktop
-before running the project commands again.
+If the frontend still shows an old page after saving, restart its development service and refresh the browser:
+
+```powershell
+docker compose -f compose.yml restart frontend
+```
+
+If Docker cannot connect to its engine, check that Docker Desktop is running.
 
 ## Stop the application
 
-```bash
-docker compose down
+```powershell
+docker compose -f compose.yml down
 ```
 
 This stops the services and keeps the database volume.
 
-## Phase 1 answers
+## Earlier phases
 
-The answers to the Phase 1 skeleton questions are in questions.md.
+- [Phase 3 questions and answers](phases/phase-03/questions.md)
+- [Abstract Factory implementation notes](docs/patterns/abstract-factory.md)
+- [Phase 1 answers](questions.md)
 
-## Verification status
+## Reference and assistance
 
-End-to-end runtime verification is pending.
-The commands and expected results above still need to be checked on a running system.
+The Phase 1 foundation was compared with the course example, and parts of its corrections were adapted from that example:
 
-## Reference
+[Course example project](https://github.com/xamk-mire/DesignPatterns-Example-Project/tree/main/Example-project)
 
-I compared my Phase 1 implementation with the course example and used it
-to guide corrections to the backend layers, health endpoint, and API
-documentation. Parts of these corrections were adapted from the example.
-
-Course example:
-https://github.com/xamk-mire/DesignPatterns-Example-Project/tree/main/Example-project
+AI assistance was used for Phase 4 implementation guidance, debugging, test examples, and documentation drafts.
