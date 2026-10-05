@@ -101,7 +101,7 @@ class EdgeHardwareFactory(DeviceFamilyFactory):
         # Hardware configuration only; no real GPIO access in this phase.
         return self._create_kit(
             label="Edge",
-            protocol="gpio_stub",
+            protocol="mqtt",
             simulated=False,
         )
 

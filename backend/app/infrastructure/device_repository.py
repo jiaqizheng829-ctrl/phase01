@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -10,35 +12,40 @@ class DeviceRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    # Keep the Phase 2 sensor API working.
+    def get(self, device_id: UUID) -> Device | None:
+        row = self.session.get(DeviceRow, device_id)
+        return self._to_device(row) if row is not None else None
+
     def add_sensor(self, sensor: Sensor) -> Sensor:
-        device = Device(
-            id=None,
+        row = DeviceRow(
             device_type=sensor.device_type,
             role="sensor",
             device_family="simulation",
             display_name=sensor.display_name,
             default_config=dict(sensor.default_config),
-        )
-        saved = self.save_device(device)
-        return Sensor(
-            id=saved.id,
-            device_type=saved.device_type,
-            display_name=saved.display_name,
-            default_config=dict(saved.default_config),
+            sampling_interval_seconds=sensor.sampling_interval_seconds,
+            tracking_enabled=sensor.tracking_enabled,
         )
 
+        try:
+            self.session.add(row)
+            self.session.flush()
+            saved = self._to_sensor(row)
+            self.session.commit()
+            return saved
+        except Exception:
+            self.session.rollback()
+            raise
+
     def list_sensors(self) -> list[Sensor]:
-        devices = self.list_devices(role="sensor")
-        return [
-            Sensor(
-                id=device.id,
-                device_type=device.device_type,
-                display_name=device.display_name,
-                default_config=dict(device.default_config),
-            )
-            for device in devices
-        ]
+        statement = (
+            select(DeviceRow)
+            .where(DeviceRow.role == "sensor")
+            .order_by(DeviceRow.created_at, DeviceRow.id)
+        )
+
+        rows = self.session.scalars(statement).all()
+        return [self._to_sensor(row) for row in rows]
 
     def save_device(self, device: Device) -> Device:
         return self.save_many([device])[0]
@@ -79,9 +86,7 @@ class DeviceRepository:
             )
 
         if role is not None:
-            statement = statement.where(
-                DeviceRow.role == role
-            )
+            statement = statement.where(DeviceRow.role == role)
 
         statement = statement.order_by(
             DeviceRow.created_at,
@@ -90,6 +95,17 @@ class DeviceRepository:
         rows = self.session.scalars(statement).all()
 
         return [self._to_device(row) for row in rows]
+
+    @staticmethod
+    def _to_sensor(row: DeviceRow) -> Sensor:
+        return Sensor(
+            id=row.id,
+            device_type=row.device_type,
+            display_name=row.display_name,
+            default_config=dict(row.default_config),
+            sampling_interval_seconds=row.sampling_interval_seconds,
+            tracking_enabled=row.tracking_enabled,
+        )
 
     @staticmethod
     def _to_device(row: DeviceRow) -> Device:

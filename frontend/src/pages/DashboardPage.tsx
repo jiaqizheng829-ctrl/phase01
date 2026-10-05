@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+
 import DevicesSection from "../components/devices/DevicesSection";
 import ConfigurationSection from "../components/config/ConfigurationSection";
+import SensorCard from "../components/sensors/SensorCard";
 import {
   createSensor,
   getSensors,
@@ -89,7 +91,7 @@ export default function DashboardPage() {
               Sensors
             </h2>
             <p className="mt-1 text-sm text-slate-400">
-              Create and view greenhouse sensors.
+              View saved readings and manage sensor sampling.
             </p>
           </div>
 
@@ -117,7 +119,9 @@ export default function DashboardPage() {
         </div>
 
         {loading && (
-          <p className="mt-5 text-slate-400">Loading sensors...</p>
+          <p role="status" className="mt-5 text-slate-400">
+            Loading sensors...
+          </p>
         )}
 
         {error && (
@@ -138,20 +142,7 @@ export default function DashboardPage() {
         {!loading && sensors.length > 0 && (
           <ul className="mt-5 grid gap-3 sm:grid-cols-2">
             {sensors.map((sensor) => (
-              <li
-                key={sensor.id}
-                className="rounded-lg border border-slate-700 bg-slate-800 p-4"
-              >
-                <h3 className="font-semibold text-slate-100">
-                  {sensor.display_name}
-                </h3>
-                <p className="mt-1 text-sm text-emerald-400">
-                  {sensor.device_type}
-                </p>
-                <pre className="mt-3 overflow-auto text-xs text-slate-400">
-                  {JSON.stringify(sensor.default_config, null, 2)}
-                </pre>
-              </li>
+              <SensorCard key={sensor.id} sensor={sensor} />
             ))}
           </ul>
         )}

@@ -97,3 +97,15 @@ def test_new_kits_do_not_share_mutable_configuration():
 def test_unknown_family_is_rejected():
     with pytest.raises(UnknownDeviceFamily):
         get_device_factory("unknown")
+
+def test_family_protocols_match_phase5_requirements():
+    for family, expected_protocol in (
+        ("simulation", "simulation"),
+        ("edge", "mqtt"),
+    ):
+        devices = get_device_factory(family).create_device_set()
+
+        assert all(
+            device.default_config["protocol"] == expected_protocol
+            for device in devices
+        )

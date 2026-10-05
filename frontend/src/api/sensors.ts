@@ -6,6 +6,8 @@ export type Sensor = {
   device_type: string;
   display_name: string;
   default_config: Record<string, unknown>;
+  sampling_interval_seconds: number;
+  tracking_enabled: boolean;
 };
 
 type CreateSensorPayload = {

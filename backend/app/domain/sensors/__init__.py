@@ -12,6 +12,8 @@ class Sensor:
     device_type: str
     display_name: str
     default_config: dict[str, Any]
+    sampling_interval_seconds: int = 300
+    tracking_enabled: bool = True
 
 
 class SensorCreator(ABC):
@@ -31,10 +33,11 @@ class MoistureSensorCreator(SensorCreator):
             device_type="moisture_sensor",
             display_name=display_name or "Moisture sensor",
             default_config={
-                "unit": "%",
+                "protocol": "simulation",
+                "unit": "vwc",
                 "minimum": 0,
-                "maximum": 100,
-                "warning_below": 30,
+                "maximum": 1,
+                "warning_below": 0.3,
             },
         )
 
@@ -48,6 +51,7 @@ class LightSensorCreator(SensorCreator):
             device_type="light_sensor",
             display_name=display_name or "Light sensor",
             default_config={
+                "protocol": "simulation",
                 "unit": "lux",
                 "minimum": 0,
                 "maximum": 100000,

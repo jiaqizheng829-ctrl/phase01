@@ -3,10 +3,12 @@ from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     String,
     UniqueConstraint,
@@ -88,6 +90,10 @@ class DeviceRow(Base):
     __table_args__ = (
         Index("ix_devices_role", "role"),
         Index("ix_devices_family", "device_family"),
+        CheckConstraint(
+            "sampling_interval_seconds >= 5",
+            name="ck_devices_sampling_interval",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -130,8 +136,57 @@ class DeviceRow(Base):
         nullable=True,
         index=True,
     )
+    sampling_interval_seconds: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default=text("300"),
+    )
+    tracking_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("true"),
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
+    )
+
+
+class ReadingRow(Base):
+    __tablename__ = "sensor_readings"
+
+    id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    device_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("devices.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    value: Mapped[Decimal] = mapped_column(
+        Numeric,
+        nullable=False,
+    )
+    unit: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+    )
+    source: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+    )
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_sensor_readings_device_recorded_at",
+            device_id,
+            recorded_at.desc(),
+        ),
     )
