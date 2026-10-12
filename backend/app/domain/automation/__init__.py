@@ -1,0 +1,1 @@
+"""Automation strategies and their plain Python context."""

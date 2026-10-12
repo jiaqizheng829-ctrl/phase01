@@ -190,3 +190,38 @@ class ReadingRow(Base):
             recorded_at.desc(),
         ),
     )
+
+class AutomationRuleRow(Base):
+    __tablename__ = "automation_rules"
+    __table_args__ = (
+        UniqueConstraint(
+            "location_id",
+            name="uq_automation_rules_location_id",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    location_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("locations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    strategy_key: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+    )
+    parameters: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )

@@ -12,6 +12,7 @@ from app.interfaces.api.health import router as health_router
 from app.interfaces.api.sensors import router as sensors_router
 from app.interfaces.api.devices import router as devices_router
 from app.interfaces.api.locations import router as locations_router
+from app.interfaces.api.automation import router as automation_router
 
 
 @asynccontextmanager
@@ -64,6 +65,7 @@ app.include_router(health_router)
 app.include_router(sensors_router)
 app.include_router(devices_router)
 app.include_router(locations_router)
+app.include_router(automation_router)
 add_scalar_reference(app, route="/scalar")
 
 
