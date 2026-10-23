@@ -4,6 +4,7 @@ import DevicesSection from "../components/devices/DevicesSection";
 import ConfigurationSection from "../components/config/ConfigurationSection";
 import SensorCard from "../components/sensors/SensorCard";
 import StrategyPanel from "../components/automation/StrategyPanel";
+import OverviewPanel from "../components/overview/OverviewPanel";
 import {
   createSensor,
   getSensors,
@@ -11,7 +12,6 @@ import {
 } from "../api/sensors";
 
 const laterSections = [
-  { id: "overview", title: "Overview" },
   { id: "controls", title: "Controls" },
   { id: "events", title: "Events" },
 ];
@@ -152,7 +152,10 @@ export default function DashboardPage() {
         refreshKey={configurationRefresh}
         onChanged={refreshConfiguration}
       />
+
       <StrategyPanel refreshKey={configurationRefresh} />
+
+      <OverviewPanel refreshKey={configurationRefresh} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {laterSections.map((section) => (

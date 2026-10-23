@@ -1,22 +1,24 @@
-# Greenhouse Dashboard — Phase 6: Strategy
+# Greenhouse Dashboard — Phase 7: Facade
 
 A greenhouse coursework project using React, FastAPI, and PostgreSQL.
 
-## Phase 6 submission
+## Phase 7 submission
 
-- [Phase 6 questions and answers](phases/phase-06/questions.md)
-- [Strategy pattern notes](docs/patterns/strategy.md)
-- [Phase 6 requirements](phases/phase-06/requirements.md)
+- [Phase 7 questions and answers](phases/phase-07/questions.md)
+- [Facade pattern notes](docs/patterns/facade.md)
+- [Phase 7 requirements](phases/phase-07/requirements.md)
 
-## Phase 6 features
+## Phase 7 features
 
-- Save a conservative or aggressive strategy for each location.
-- Evaluate each zone using its own thresholds and latest saved moisture reading.
-- Show recommendations and reasons in the Dashboard.
-- Return `wait` when a zone has no moisture sensor or no saved reading.
-- Keep decision logic separate from API handling and database access.
+- One overview API for a selected location.
+- Assigned sensor and actuator counts.
+- All zones, including zones without devices.
+- Assigned devices and their latest saved readings.
+- Tracking status and sampling interval on reading summaries.
+- Saved strategy and a recommendation calculated on each request.
+- Dashboard Overview panel with a location selector and Refresh button.
 
-Strategies only recommend actions. They do not start pumps.
+No new database table, view, or migration was needed.
 
 ## Start the application
 
@@ -32,83 +34,111 @@ docker compose -f compose.yml up -d --build
 docker compose -f compose.yml ps
 ```
 
-The backend applies database migrations before starting.
+The backend applies migrations before starting.
 
-Check the current revision:
+Check the database revision:
 
 ```powershell
 docker compose -f compose.yml exec backend alembic current
 ```
 
-The Phase 6 revision is `9d391b40fb2f`, following Phase 5 revision `3b45041792c3`.
+The current revision remains `9d391b40fb2f` from Phase 6.
 
 Open:
 
 - [Dashboard](http://localhost:5173/dashboard)
-- [Automation panel](http://localhost:5173/dashboard#automation)
+- [Overview](http://localhost:5173/dashboard#overview)
+- [Automation](http://localhost:5173/dashboard#automation)
 - [Health check](http://localhost:8000/health)
 - [Scalar API documentation](http://localhost:8000/scalar)
 - [OpenAPI JSON](http://localhost:8000/openapi.json)
 
-## Using automation
+## Using Overview
 
-1. Create a location and zones in Configuration if needed.
-2. Assign a moisture sensor to a zone using the device card.
-3. Use Read now or allow automatic sampling to save a reading.
-4. Open Automation and select the location.
-5. Select Conservative or Aggressive.
-6. Click Save strategy.
-7. Click Evaluate.
+1. Open the Dashboard and scroll to Overview.
+2. Select a location.
+3. View device counts, strategy, recommendation, and zone cards.
+4. Click Refresh to load current data.
 
-The panel shows the saved strategy and each zone's recommendation. Refreshing the page loads saved settings again for the selected location.
+The location selector uses the existing locations-list endpoint. Overview cards come from one overview response. Refresh repeats that overview request.
 
-Save a changed selection before evaluating. A location without a saved strategy cannot be evaluated.
+The panel does not poll automatically.
 
-## Strategy behavior
+### Overview rules
 
-Conservative recommends irrigation below the zone's lower threshold.
+- Only devices assigned to a zone in the selected location are included.
+- Unassigned devices are excluded from counts and zone cards.
+- Every zone is included, even if it has no devices.
+- Devices without readings remain listed with a “No reading available” message.
+- Each device with readings has only its newest reading included.
+- Reading source is not filtered: manual, sampled, and MQTT-ingested readings qualify.
+- Tracking and sampling settings come from the device table.
 
-Aggressive recommends irrigation below the midpoint of the zone's lower and upper thresholds.
+A location without a saved strategy still loads normally. Its strategy and recommendation fields are null.
 
-| Low | High | Moisture | Conservative | Aggressive |
-| --- | --- | --- | --- | --- |
-| 0.2 | 0.8 | 0.4 | wait | irrigate |
+The recommendation is calculated during each request using the existing automation service. It is not stored in a new table, and no pump commands are sent.
 
-At exactly the policy's threshold, the result is `wait`.
+## Overview API
 
-Each zone uses the latest reading among its assigned moisture sensors. Readings from light sensors, unassigned sensors, and other zones are excluded.
+```text
+GET /api/locations/{location_id}/overview
+```
 
-A missing sensor or missing reading produces `wait` with a reason. A location without zones produces `wait` with an empty zone list.
+Main response fields:
 
-The overall action is `irrigate` if any zone recommends irrigation. Individual zone results explain where it is recommended.
+| Field | Contents |
+| --- | --- |
+| `location` | Location ID and name |
+| `device_counts` | Assigned sensor and actuator counts |
+| `zones` | All zones, thresholds, devices, and latest readings |
+| `strategy_key` | Saved strategy key or null |
+| `last_recommendation` | Calculated action and reason, or null |
 
-Automatic sampling may change moisture between evaluations. The unit and API tests use fixed readings to compare policies reliably.
+Missing locations return HTTP 404.
 
-## Strategy persistence and architecture
+The route calls only LocationOverviewFacade. Dependency construction is handled separately.
 
-The `automation_rules` table stores one strategy per location:
+The facade coordinates repositories and AutomationService. It does not contain SQL, sensor translation, or irrigation algorithms.
 
-- UUID primary key
-- Unique `location_id` foreign key
-- `strategy_key`
-- JSONB `parameters`, currently unused
-- `updated_at`
+The overview repository loads assigned devices together and uses one window-function query for their latest readings. It does not run a reading query for each device. The existing automation service still performs its own per-zone moisture lookups.
 
-Saving again updates the existing row. Deleting a location also deletes its rule.
+## Automation from Phase 6
 
-The domain contains plain Python strategies and context objects. The application service loads the saved key and calls the selected strategy for each zone. Infrastructure repositories handle database queries, and the API returns DTOs.
+Each location can save a conservative or aggressive strategy.
 
-Evaluation uses existing database readings without adding a scheduler or MQTT connection. The latest reading has no age limit in this implementation.
+- Conservative recommends irrigation below the zone's lower moisture threshold.
+- Aggressive recommends irrigation below the midpoint of its lower and upper thresholds.
+- Equality with the policy threshold returns `wait`.
 
-Recommendations are displayed in the UI but are not stored as recommendation history.
+For moisture 0.4 with thresholds 0.2 and 0.8:
 
-## Automation API
+| Strategy | Recommendation |
+| --- | --- |
+| Conservative | wait |
+| Aggressive | irrigate |
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| GET | `/api/locations/{location_id}/automation` | Read saved strategy |
-| PUT | `/api/locations/{location_id}/automation` | Save or change strategy |
-| POST | `/api/locations/{location_id}/automation/evaluate` | Evaluate using the saved strategy |
+Each zone uses its own assigned moisture sensors. Missing sensors or readings produce `wait` with a reason.
+
+The overall recommendation is `irrigate` if at least one zone recommends irrigation.
+
+### Using Automation
+
+1. Select a location in Automation.
+2. Select a strategy.
+3. Click Save strategy.
+4. Click Evaluate.
+
+Save changed selections before evaluating. Saved settings are stored in `automation_rules`, with one rule per location.
+
+Evaluation uses the latest stored reading without an age limit. Automatic sampling can change readings between evaluations.
+
+### Automation API
+
+| Method | Path |
+| --- | --- |
+| GET | `/api/locations/{location_id}/automation` |
+| PUT | `/api/locations/{location_id}/automation` |
+| POST | `/api/locations/{location_id}/automation/evaluate` |
 
 Save body:
 
@@ -118,42 +148,31 @@ Save body:
 }
 ```
 
-Known keys are `conservative` and `aggressive`.
+Missing locations return 404. Unknown strategies and evaluation without a saved strategy return 400.
 
-- Missing location: HTTP 404.
-- Unknown strategy: HTTP 400.
-- Evaluation before saving a strategy: HTTP 400.
-- Malformed request bodies use FastAPI validation responses.
+## Sensors and sampling from Phase 5
 
-Evaluation returns the location ID, saved strategy key, overall action and reason, and a `zones` list with individual results.
-
-## Retained sensor features
-
-Phase 5 features remain available:
-
-- Simulation sensor readings through `SensorPort`.
-- Vendor stub data translation.
-- MQTT payload translation without a broker connection.
-- Persisted reading history.
-- Automatic sampling for enabled simulation sensors.
-- Sampling interval and tracking controls.
-- Sensor cards showing readings, sources, and timestamps.
-- A simulation actuator implementing `ActuatorPort`.
+- Simulation sensors generate readings through SensorPort.
+- Vendor adapters translate stub data.
+- MQTT adapters translate payloads without connecting to a broker.
+- Readings are saved in `sensor_readings`.
+- ReadingIngest.record() is the shared write path.
+- Enabled simulation sensors are sampled automatically.
 
 Moisture uses `vwc` on a 0–1 scale. Light uses `lux`.
 
-The simulation adapter generates moisture between 0.2 and 0.6 and light between 200 and 2000 lux.
+Simulation values range from 0.2 to 0.6 for moisture and 200 to 2000 for light.
 
 ### Sensor cards
 
 1. Click Read now to save a reading.
-2. Set a sampling interval of at least 5 seconds.
+2. Set an interval of at least 5 seconds.
 3. Choose whether tracking is enabled.
 4. Click Save settings.
 
 Turning tracking off stops automatic sampling. Manual reads remain available for simulation sensors.
 
-Cards fetch the latest reading every five seconds. This is temporary polling until the later WebSocket phase.
+Sensor cards fetch the latest saved reading every five seconds.
 
 ### Adapter selection
 
@@ -163,61 +182,39 @@ Cards fetch the latest reading every five seconds. This is temporary polling unt
 | `protocol: simulation`, `driver: vendor_stub` | Translate vendor stub data |
 | `protocol: mqtt` | Translate incoming payloads; no manual generation |
 
-New edge kits use `mqtt`. There is no broker connection or device HTTP ingestion endpoint in this implementation. MQTT translation and persistence are tested directly.
+New edge kits use MQTT configuration. No broker connection or device HTTP ingestion endpoint is provided.
 
-Previously saved device configurations are not automatically rewritten when factory defaults change.
+Previously saved configurations are not rewritten when factory defaults change.
 
-### Sampling and storage
+Run one backend worker. The sampler can be disabled with `SIMULATION_SAMPLER_ENABLED=false` in the backend environment. It is also disabled when `TEST_DATABASE_URL` is set.
 
-Readings are appended to `sensor_readings`. `ReadingIngest.record()` is the shared write path for manual reads, sampling, and translated MQTT readings.
-
-Sampling settings are stored on `devices`. The sampler checks every second and records enabled simulation sensors when their interval has elapsed.
-
-Run one backend worker. Setting `SIMULATION_SAMPLER_ENABLED=false` in the backend environment disables the background loop. The loop is also disabled when `TEST_DATABASE_URL` is set.
-
-### Reading API
+### Sensor API
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/sensors` | List sensors and sampling settings |
-| POST | `/api/sensors` | Create a simulation sensor |
-| POST | `/api/sensors/{id}/read` | Take and save a reading |
-| GET | `/api/sensors/{id}/readings?limit=20` | Read history, newest first |
+| GET | `/api/sensors` | List sensors |
+| POST | `/api/sensors` | Create simulation sensor |
+| POST | `/api/sensors/{id}/read` | Save a manual reading |
+| GET | `/api/sensors/{id}/readings?limit=20` | Get reading history |
 | PATCH | `/api/devices/{id}/sampling` | Save sampling settings |
 
 History limits range from 1 to 100.
 
-Example sampling body:
+## Location configuration
 
-```json
-{
-  "sampling_interval_seconds": 30,
-  "tracking_enabled": true
-}
-```
+Earlier configuration features remain available:
 
-## Retained configuration features
-
-- Create locations with zones using Builder.
-- Read and edit saved configurations.
-- Add, edit, and delete zones.
-- Keep at least one zone per location.
+- Create locations and zones using Builder.
+- Edit zone thresholds and schedules.
 - Assign or unassign devices.
+- Delete zones while keeping at least one per location.
 - Delete locations while retaining devices.
 
-Moisture thresholds must satisfy `0 <= low < high <= 1`.
+Thresholds must satisfy `0 <= low < high <= 1`.
 
-Device assignment updates `zone_id` and `location_id` together. Deleting a zone or location clears affected assignments.
+Device assignment updates both `location_id` and `zone_id`. Deleting a zone or location clears affected assignments.
 
-### Configuration UI
-
-1. Open Configuration and click New location.
-2. Enter a name and add zones.
-3. Click Create location.
-4. Select a saved location to manage its zones.
-5. Use device cards to assign sensors to zones.
-
-Location deletion requires confirmation. Schedules are JSON objects; an empty schedule is `{}`.
+Use Configuration to create and edit locations. Use the device cards' zone selectors to assign devices.
 
 ### Configuration API
 
@@ -235,7 +232,7 @@ Location deletion requires confirmation. Schedules are JSON objects; an empty sc
 
 ## Backend tests
 
-API tests use a separate database named `greenhouse_phase3_test`. The name is retained from earlier phases.
+API tests use a separate database named `greenhouse_phase3_test`. This name is retained from earlier phases.
 
 Create it once if it does not exist:
 
@@ -243,33 +240,25 @@ Create it once if it does not exist:
 docker compose -f compose.yml exec db createdb -U greenhouse greenhouse_phase3_test
 ```
 
-Apply migrations:
+Apply existing migrations:
 
 ```powershell
 docker compose -f compose.yml exec -e DATABASE_URL=postgresql+psycopg2://greenhouse:greenhouse@db:5432/greenhouse_phase3_test backend alembic upgrade head
 ```
 
-Run all backend tests:
+Run all tests:
 
 ```powershell
 docker compose -f compose.yml exec -e TEST_DATABASE_URL=postgresql+psycopg2://greenhouse:greenhouse@db:5432/greenhouse_phase3_test backend python -m pytest -q
 ```
 
-Run only strategy unit tests:
+Run Overview tests only:
 
 ```powershell
-docker compose -f compose.yml exec backend python -m pytest tests/test_automation_strategies.py -q
+docker compose -f compose.yml exec -e TEST_DATABASE_URL=postgresql+psycopg2://greenhouse:greenhouse@db:5432/greenhouse_phase3_test backend python -m pytest tests/test_overview_api.py -q
 ```
 
-Run only automation API tests:
-
-```powershell
-docker compose -f compose.yml exec -e TEST_DATABASE_URL=postgresql+psycopg2://greenhouse:greenhouse@db:5432/greenhouse_phase3_test backend python -m pytest tests/test_automation_api.py -q
-```
-
-API tests roll back temporary data. Without `TEST_DATABASE_URL`, database API tests are skipped.
-
-Strategy unit tests need no database or broker.
+API tests roll back temporary data. Without TEST_DATABASE_URL, database API tests are skipped.
 
 ## Frontend check
 
@@ -277,18 +266,27 @@ Strategy unit tests need no database or broker.
 docker compose -f compose.yml exec frontend npm run build
 ```
 
-This runs TypeScript checking and the Vite production build.
+This runs TypeScript checking and the production build.
 
 ## Verification performed
 
-- Complete backend suite: **97 passed, 1 warning**.
-- Strategy unit tests: **23 passed**.
-- Automation API tests: **6 passed**.
+- Complete backend suite: **99 passed, 1 warning**.
+- Overview API tests: **2 passed**.
 - Frontend TypeScript checking and production build passed.
-- Phase 6 migration applied to application and test databases.
-- API checks demonstrated different recommendations for the same stored moisture after switching strategies.
-- Dashboard checks demonstrated loading saved strategies and displaying per-zone recommendations.
-- Integration tests verified persistence, unknown keys, missing locations, unconfigured locations, empty locations, and zone reading isolation.
+- Manual Overview checks covered populated and empty locations.
+- Scalar displayed the overview response schema.
+
+Overview tests verified:
+
+- Missing location returns 404.
+- No saved strategy returns 200 with null strategy fields.
+- Counts exclude unassigned devices.
+- Empty zones remain included.
+- Devices without readings remain listed.
+- Latest readings include device sampling settings.
+- MQTT readings are eligible.
+- Recommendations match the existing evaluation service.
+- New readings and changed strategies appear on the next GET.
 
 The warning is a Starlette TestClient dependency deprecation warning. It did not fail the tests.
 
@@ -308,9 +306,11 @@ docker compose -f compose.yml restart frontend
 
 Then refresh the browser.
 
-If Evaluate is disabled, save the selected strategy first.
+If Overview shows old readings or settings, click its Refresh button.
 
-A `wait` recommendation can be correct even for Aggressive. Check the displayed moisture, thresholds, and reason.
+If Overview shows no devices, check that devices are assigned to zones in the selected location.
+
+If no strategy is saved, use Automation to save one, then refresh Overview.
 
 If Docker cannot connect to its engine, start Docker Desktop and wait until it is running.
 
@@ -324,11 +324,13 @@ This stops services and retains the database volume.
 
 ## Earlier phases
 
-- [Phase 5 questions and answers](phases/phase-05/questions.md)
+- [Phase 6 questions](phases/phase-06/questions.md)
+- [Strategy notes](docs/patterns/strategy.md)
+- [Phase 5 questions](phases/phase-05/questions.md)
 - [Adapter notes](docs/patterns/adapter.md)
-- [Phase 4 questions and answers](phases/phase-04/questions.md)
+- [Phase 4 questions](phases/phase-04/questions.md)
 - [Builder notes](docs/patterns/builder.md)
-- [Phase 3 questions and answers](phases/phase-03/questions.md)
+- [Phase 3 questions](phases/phase-03/questions.md)
 - [Abstract Factory notes](docs/patterns/abstract-factory.md)
 - [Phase 1 answers](questions.md)
 
@@ -341,4 +343,4 @@ The teacher's example projects were used as references. They are separate from t
 
 The Phase 1 foundation was compared with the course example, and some corrections were adapted from it.
 
-AI assistance was used for implementation guidance, debugging, test examples, and documentation drafts in Phases 4, 5, and 6.
+AI assistance was used for implementation guidance, debugging, test examples, and documentation drafts in Phases 4–7.
