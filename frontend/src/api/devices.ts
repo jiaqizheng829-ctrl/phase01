@@ -4,6 +4,13 @@ const API_BASE_URL =
 export type DeviceFamily = "simulation" | "edge";
 export type DeviceRole = "sensor" | "actuator";
 
+export type ActuatorState =
+  | "off"
+  | "idle"
+  | "running"
+  | "error"
+  | "maintenance";
+
 export type DeviceDto = {
   id: string;
   device_type: string;
@@ -13,6 +20,8 @@ export type DeviceDto = {
   default_config: Record<string, unknown>;
   zone_id: string | null;
   location_id: string | null;
+  state: ActuatorState | null;
+  allowed_commands: string[];
 };
 
 async function checkResponse(response: Response): Promise<void> {

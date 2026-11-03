@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.domain.devices.entity import Device
 from app.domain.sensors import Sensor
-from app.infrastructure.models import DeviceRow
+from app.infrastructure.models import ActuatorStateRow, DeviceRow
 
 
 class DeviceRepository:
@@ -14,7 +14,9 @@ class DeviceRepository:
 
     def get(self, device_id: UUID) -> Device | None:
         row = self.session.get(DeviceRow, device_id)
-        return self._to_device(row) if row is not None else None
+        if row is None:
+            return None
+        return self.to_devices([row])[0]
 
     def add_sensor(self, sensor: Sensor) -> Sensor:
         row = DeviceRow(
@@ -43,7 +45,6 @@ class DeviceRepository:
             .where(DeviceRow.role == "sensor")
             .order_by(DeviceRow.created_at, DeviceRow.id)
         )
-
         rows = self.session.scalars(statement).all()
         return [self._to_sensor(row) for row in rows]
 
@@ -65,13 +66,25 @@ class DeviceRepository:
         try:
             self.session.add_all(rows)
             self.session.flush()
-            saved = [self._to_device(row) for row in rows]
+
+            self.session.add_all(
+                [
+                    ActuatorStateRow(
+                        device_id=row.id,
+                        state="idle",
+                    )
+                    for row in rows
+                    if row.role == "actuator"
+                ]
+            )
+            self.session.flush()
+
+            saved = self.to_devices(rows)
             self.session.commit()
+            return saved
         except Exception:
             self.session.rollback()
             raise
-
-        return saved
 
     def list_devices(
         self,
@@ -93,8 +106,43 @@ class DeviceRepository:
             DeviceRow.id,
         )
         rows = self.session.scalars(statement).all()
+        return self.to_devices(list(rows))
 
-        return [self._to_device(row) for row in rows]
+    def to_devices(self, rows: list[DeviceRow]) -> list[Device]:
+        actuator_ids = [
+            row.id for row in rows if row.role == "actuator"
+        ]
+
+        states: dict[UUID, str] = {}
+
+        if actuator_ids:
+            state_rows = self.session.execute(
+                select(
+                    ActuatorStateRow.device_id,
+                    ActuatorStateRow.state,
+                ).where(
+                    ActuatorStateRow.device_id.in_(actuator_ids)
+                )
+            ).all()
+
+            states = {
+                device_id: state
+                for device_id, state in state_rows
+            }
+
+        devices = []
+
+        for row in rows:
+            state = states.get(row.id)
+
+            if row.role == "actuator" and state is None:
+                raise RuntimeError(
+                    f"State is missing for actuator {row.id}."
+                )
+
+            devices.append(self._to_device(row, state))
+
+        return devices
 
     @staticmethod
     def _to_sensor(row: DeviceRow) -> Sensor:
@@ -108,7 +156,10 @@ class DeviceRepository:
         )
 
     @staticmethod
-    def _to_device(row: DeviceRow) -> Device:
+    def _to_device(
+        row: DeviceRow,
+        state: str | None = None,
+    ) -> Device:
         return Device(
             id=row.id,
             device_type=row.device_type,
@@ -118,4 +169,5 @@ class DeviceRepository:
             default_config=dict(row.default_config),
             zone_id=row.zone_id,
             location_id=row.location_id,
+            state=state,
         )

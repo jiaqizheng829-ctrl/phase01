@@ -1,7 +1,7 @@
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class DeviceDto(BaseModel):
@@ -13,6 +13,14 @@ class DeviceDto(BaseModel):
     default_config: dict[str, Any]
     zone_id: UUID | None = None
     location_id: UUID | None = None
+    state: Literal[
+        "off",
+        "idle",
+        "running",
+        "error",
+        "maintenance",
+    ] | None = None
+    allowed_commands: list[str] = Field(default_factory=list)
 
 
 class ZoneAssignmentRequest(BaseModel):

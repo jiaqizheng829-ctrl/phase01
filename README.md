@@ -1,24 +1,26 @@
-# Greenhouse Dashboard — Phase 7: Facade
+# Greenhouse Dashboard — Phase 8: State
 
 A greenhouse coursework project using React, FastAPI, and PostgreSQL.
 
-## Phase 7 submission
+## Phase 8 submission
 
-- [Phase 7 questions and answers](phases/phase-07/questions.md)
-- [Facade pattern notes](docs/patterns/facade.md)
-- [Phase 7 requirements](phases/phase-07/requirements.md)
+- [Phase 8 questions and answers](phases/phase-08/questions.md)
+- [State pattern notes](docs/patterns/state.md)
+- [Phase 8 requirements](phases/phase-08/requirements.md)
+- [Phase 8 guided check](phases/phase-08/guided-check.md)
 
-## Phase 7 features
+## Phase 8 features
 
-- One overview API for a selected location.
-- Assigned sensor and actuator counts.
-- All zones, including zones without devices.
-- Assigned devices and their latest saved readings.
-- Tracking status and sampling interval on reading summaries.
-- Saved strategy and a recommendation calculated on each request.
-- Dashboard Overview panel with a location selector and Refresh button.
+- Five actuator states: idle, running, off, error, and maintenance.
+- Transition rules in the backend domain.
+- Saved actuator states in PostgreSQL.
+- Idle states for existing and newly created actuators.
+- State and allowed commands in device responses.
+- State badges and allowed-command labels on device cards.
+- A demo API for changing lifecycle state.
+- Tests for legal transitions, rejected transitions, and persistence.
 
-No new database table, view, or migration was needed.
+The demo transition API changes the saved lifecycle state only. It does not send commands to physical devices.
 
 ## Start the application
 
@@ -42,7 +44,7 @@ Check the database revision:
 docker compose -f compose.yml exec backend alembic current
 ```
 
-The current revision remains `9d391b40fb2f` from Phase 6.
+The Phase 8 revision is `16dd3ce021ac`.
 
 Open:
 
@@ -53,86 +55,141 @@ Open:
 - [Scalar API documentation](http://localhost:8000/scalar)
 - [OpenAPI JSON](http://localhost:8000/openapi.json)
 
-## Using Overview
+## Using actuator states
 
-1. Open the Dashboard and scroll to Overview.
-2. Select a location.
-3. View device counts, strategy, recommendation, and zone cards.
-4. Click Refresh to load current data.
+1. Open the Dashboard.
+2. Find the Devices section.
+3. Select a device family.
+4. View the state badge and allowed commands on actuator cards.
+5. Click Refresh after changing a state through the API.
 
-The location selector uses the existing locations-list endpoint. Overview cards come from one overview response. Refresh repeats that overview request.
+Sensors do not display actuator state badges.
 
-The panel does not poll automatically.
+The allowed commands are informational labels, not clickable command buttons.
 
-### Overview rules
+For an idle actuator, the allowed commands are:
 
-- Only devices assigned to a zone in the selected location are included.
-- Unassigned devices are excluded from counts and zone cards.
-- Every zone is included, even if it has no devices.
-- Devices without readings remain listed with a “No reading available” message.
-- Each device with readings has only its newest reading included.
-- Reading source is not filtered: manual, sampled, and MQTT-ingested readings qualify.
-- Tracking and sampling settings come from the device table.
+- start
+- turn_off
+- enter_maintenance
+- report_error
 
-A location without a saved strategy still loads normally. Its strategy and recommendation fields are null.
+For a running actuator, only `stop` and `report_error` are allowed.
 
-The recommendation is calculated during each request using the existing automation service. It is not stored in a new table, and no pump commands are sent.
+## State transitions
 
-## Overview API
+| Current state | Command | Next state |
+| --- | --- | --- |
+| idle | start | running |
+| idle | turn_off | off |
+| idle | enter_maintenance | maintenance |
+| idle | report_error | error |
+| running | stop | idle |
+| running | report_error | error |
+| off | turn_on | idle |
+| off | enter_maintenance | maintenance |
+| off | report_error | error |
+| error | reset | idle |
+| error | enter_maintenance | maintenance |
+| maintenance | finish_maintenance | idle |
+| maintenance | report_error | error |
+
+Other transitions are rejected, including transitions to the same state.
+
+For example, a running actuator must stop before entering maintenance.
+
+## State design and persistence
+
+`ActuatorContext` holds the current state and delegates command checks to an `ActuatorState` object.
+
+The five state objects use immutable transition maps. State rules do not contain HTTP handling or database commits.
+
+`ActuatorStateService` loads the saved state, checks the transition, and saves the result through `ActuatorStateRepository`.
+
+The `actuator_states` table contains:
+
+- `device_id`: primary key and foreign key to the device.
+- `state`: current lifecycle state.
+- `updated_at`: latest update time.
+
+The migration creates idle state rows for existing actuators. New actuators and their initial states are saved in the same transaction. Sensors do not receive state rows.
+
+Transition requests lock the actuator and state rows before checking the current state. Illegal transitions roll back without changing the saved state.
+
+State survives a backend restart.
+
+## Actuator state API
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/devices/{device_id}/state` | Read state and allowed commands |
+| POST | `/api/devices/{device_id}/transition` | Request a lifecycle transition |
+
+Example transition body:
+
+```json
+{
+  "target": "running"
+}
+```
+
+This target is legal when the actuator is idle.
+
+Example response:
+
+```json
+{
+  "device_id": "cb92c162-932e-46cb-ac4b-4bd67a5a3eb5",
+  "state": "running",
+  "allowed_commands": [
+    "stop",
+    "report_error"
+  ]
+}
+```
+
+Use an actuator ID from your own device list when testing.
+
+- Illegal transitions return HTTP 409.
+- Missing devices and sensors passed to these endpoints return HTTP 404.
+- Invalid request bodies return HTTP 422.
+
+Device list and zone-assignment responses also include `state` and `allowed_commands`. Sensors return null state and an empty command list.
+
+Phase 10 can use these rules when adding command execution. The backend must still check the current state before executing a command.
+
+## Overview from Phase 7
+
+The Overview panel shows:
+
+- Assigned sensor and actuator counts.
+- All zones, including empty zones.
+- Assigned devices and their latest saved readings.
+- Tracking status and sampling intervals.
+- Saved strategy and a calculated recommendation.
+
+Select a location and click Refresh to load current data. The panel does not poll automatically.
 
 ```text
 GET /api/locations/{location_id}/overview
 ```
 
-Main response fields:
+Main response fields are `location`, `device_counts`, `zones`, `strategy_key`, and `last_recommendation`.
 
-| Field | Contents |
-| --- | --- |
-| `location` | Location ID and name |
-| `device_counts` | Assigned sensor and actuator counts |
-| `zones` | All zones, thresholds, devices, and latest readings |
-| `strategy_key` | Saved strategy key or null |
-| `last_recommendation` | Calculated action and reason, or null |
+Unassigned devices are excluded. Devices without readings remain listed. A location without a saved strategy returns null strategy and recommendation fields.
 
-Missing locations return HTTP 404.
-
-The route calls only LocationOverviewFacade. Dependency construction is handled separately.
-
-The facade coordinates repositories and AutomationService. It does not contain SQL, sensor translation, or irrigation algorithms.
-
-The overview repository loads assigned devices together and uses one window-function query for their latest readings. It does not run a reading query for each device. The existing automation service still performs its own per-zone moisture lookups.
+The facade combines repositories and the existing automation service. Recommendations are calculated during the request, and no pump commands are sent.
 
 ## Automation from Phase 6
 
 Each location can save a conservative or aggressive strategy.
 
-- Conservative recommends irrigation below the zone's lower moisture threshold.
-- Aggressive recommends irrigation below the midpoint of its lower and upper thresholds.
+- Conservative recommends irrigation below the lower moisture threshold.
+- Aggressive recommends irrigation below the midpoint of the lower and upper thresholds.
 - Equality with the policy threshold returns `wait`.
+- Missing moisture sensors or readings return `wait` with a reason.
 
-For moisture 0.4 with thresholds 0.2 and 0.8:
-
-| Strategy | Recommendation |
-| --- | --- |
-| Conservative | wait |
-| Aggressive | irrigate |
-
-Each zone uses its own assigned moisture sensors. Missing sensors or readings produce `wait` with a reason.
-
-The overall recommendation is `irrigate` if at least one zone recommends irrigation.
-
-### Using Automation
-
-1. Select a location in Automation.
-2. Select a strategy.
-3. Click Save strategy.
-4. Click Evaluate.
-
-Save changed selections before evaluating. Saved settings are stored in `automation_rules`, with one rule per location.
-
-Evaluation uses the latest stored reading without an age limit. Automatic sampling can change readings between evaluations.
-
-### Automation API
+In Automation, select a location and strategy, click Save strategy, then Evaluate.
 
 | Method | Path |
 | --- | --- |
@@ -140,33 +197,22 @@ Evaluation uses the latest stored reading without an age limit. Automatic sampli
 | PUT | `/api/locations/{location_id}/automation` |
 | POST | `/api/locations/{location_id}/automation/evaluate` |
 
-Save body:
-
-```json
-{
-  "strategy_key": "conservative"
-}
-```
-
-Missing locations return 404. Unknown strategies and evaluation without a saved strategy return 400.
+Evaluation uses the latest saved readings. It does not control actuator lifecycle or send physical commands.
 
 ## Sensors and sampling from Phase 5
 
-- Simulation sensors generate readings through SensorPort.
+- Simulation sensors generate readings.
 - Vendor adapters translate stub data.
 - MQTT adapters translate payloads without connecting to a broker.
 - Readings are saved in `sensor_readings`.
-- ReadingIngest.record() is the shared write path.
 - Enabled simulation sensors are sampled automatically.
 
 Moisture uses `vwc` on a 0–1 scale. Light uses `lux`.
 
-Simulation values range from 0.2 to 0.6 for moisture and 200 to 2000 for light.
+On sensor cards:
 
-### Sensor cards
-
-1. Click Read now to save a reading.
-2. Set an interval of at least 5 seconds.
+1. Click Read now to save a simulated reading.
+2. Set a sampling interval of at least 5 seconds.
 3. Choose whether tracking is enabled.
 4. Click Save settings.
 
@@ -174,65 +220,38 @@ Turning tracking off stops automatic sampling. Manual reads remain available for
 
 Sensor cards fetch the latest saved reading every five seconds.
 
-### Adapter selection
-
-| Configuration | Behavior |
+| Method | Path |
 | --- | --- |
-| `protocol: simulation` | Generate simulated readings |
-| `protocol: simulation`, `driver: vendor_stub` | Translate vendor stub data |
-| `protocol: mqtt` | Translate incoming payloads; no manual generation |
-
-New edge kits use MQTT configuration. No broker connection or device HTTP ingestion endpoint is provided.
-
-Previously saved configurations are not rewritten when factory defaults change.
-
-Run one backend worker. The sampler can be disabled with `SIMULATION_SAMPLER_ENABLED=false` in the backend environment. It is also disabled when `TEST_DATABASE_URL` is set.
-
-### Sensor API
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| GET | `/api/sensors` | List sensors |
-| POST | `/api/sensors` | Create simulation sensor |
-| POST | `/api/sensors/{id}/read` | Save a manual reading |
-| GET | `/api/sensors/{id}/readings?limit=20` | Get reading history |
-| PATCH | `/api/devices/{id}/sampling` | Save sampling settings |
+| GET | `/api/sensors` |
+| POST | `/api/sensors` |
+| POST | `/api/sensors/{id}/read` |
+| GET | `/api/sensors/{id}/readings?limit=20` |
+| PATCH | `/api/devices/{id}/sampling` |
 
 History limits range from 1 to 100.
 
-## Location configuration
+Run one backend worker. Automatic sampling is disabled when `TEST_DATABASE_URL` is set. It can also be disabled with `SIMULATION_SAMPLER_ENABLED=false`.
 
-Earlier configuration features remain available:
+## Devices and location configuration
 
-- Create locations and zones using Builder.
+Earlier features remain available:
+
+- Create simulation or edge device kits.
+- Create locations and zones.
 - Edit zone thresholds and schedules.
 - Assign or unassign devices.
 - Delete zones while keeping at least one per location.
 - Delete locations while retaining devices.
 
-Thresholds must satisfy `0 <= low < high <= 1`.
+Moisture thresholds must satisfy `0 <= low < high <= 1`.
 
 Device assignment updates both `location_id` and `zone_id`. Deleting a zone or location clears affected assignments.
 
-Use Configuration to create and edit locations. Use the device cards' zone selectors to assign devices.
-
-### Configuration API
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| POST | `/api/locations/config` | Create location and zones |
-| GET | `/api/locations` | List locations |
-| GET | `/api/locations/{location_id}/config` | Read configuration |
-| DELETE | `/api/locations/{location_id}` | Delete location |
-| POST | `/api/locations/{location_id}/zones` | Add zone |
-| PATCH | `/api/locations/{location_id}/zones/{zone_id}` | Edit zone |
-| DELETE | `/api/locations/{location_id}/zones/{zone_id}` | Delete zone |
-| PATCH | `/api/devices/{id}/zone` | Assign or unassign device |
-| GET | `/api/locations/{location_id}/zones/{zone_id}/devices` | List assigned devices |
+Use Configuration to manage locations and zones. Use the device cards' zone selectors to assign devices.
 
 ## Backend tests
 
-API tests use a separate database named `greenhouse_phase3_test`. This name is retained from earlier phases.
+API tests use a separate database named `greenhouse_phase3_test`. The name is retained from earlier phases.
 
 Create it once if it does not exist:
 
@@ -240,7 +259,7 @@ Create it once if it does not exist:
 docker compose -f compose.yml exec db createdb -U greenhouse greenhouse_phase3_test
 ```
 
-Apply existing migrations:
+Apply migrations to the test database:
 
 ```powershell
 docker compose -f compose.yml exec -e DATABASE_URL=postgresql+psycopg2://greenhouse:greenhouse@db:5432/greenhouse_phase3_test backend alembic upgrade head
@@ -252,13 +271,19 @@ Run all tests:
 docker compose -f compose.yml exec -e TEST_DATABASE_URL=postgresql+psycopg2://greenhouse:greenhouse@db:5432/greenhouse_phase3_test backend python -m pytest -q
 ```
 
-Run Overview tests only:
+Run state domain tests:
 
 ```powershell
-docker compose -f compose.yml exec -e TEST_DATABASE_URL=postgresql+psycopg2://greenhouse:greenhouse@db:5432/greenhouse_phase3_test backend python -m pytest tests/test_overview_api.py -q
+docker compose -f compose.yml exec backend python -m pytest tests/test_actuator_states.py -q
 ```
 
-API tests roll back temporary data. Without TEST_DATABASE_URL, database API tests are skipped.
+Run actuator state API tests:
+
+```powershell
+docker compose -f compose.yml exec -e TEST_DATABASE_URL=postgresql+psycopg2://greenhouse:greenhouse@db:5432/greenhouse_phase3_test backend python -m pytest tests/test_actuator_states_api.py -q
+```
+
+API tests roll back temporary data. Database API tests are skipped when `TEST_DATABASE_URL` is missing.
 
 ## Frontend check
 
@@ -270,23 +295,16 @@ This runs TypeScript checking and the production build.
 
 ## Verification performed
 
-- Complete backend suite: **99 passed, 1 warning**.
-- Overview API tests: **2 passed**.
+- Full backend suite: **164 passed, 1 warning**.
+- State domain tests: **55 passed**.
+- Actuator state API tests: **10 passed**.
 - Frontend TypeScript checking and production build passed.
-- Manual Overview checks covered populated and empty locations.
-- Scalar displayed the overview response schema.
-
-Overview tests verified:
-
-- Missing location returns 404.
-- No saved strategy returns 200 with null strategy fields.
-- Counts exclude unassigned devices.
-- Empty zones remain included.
-- Devices without readings remain listed.
-- Latest readings include device sampling settings.
-- MQTT readings are eligible.
-- Recommendations match the existing evaluation service.
-- New readings and changed strategies appear on the next GET.
+- Existing actuators had saved idle states.
+- Illegal transitions returned HTTP 409 and preserved the database state.
+- The running state survived a backend restart.
+- Device cards showed running with only `stop` and `report_error`.
+- The pump was restored to idle after the manual checks.
+- Scalar displayed the GET state response fields.
 
 The warning is a Starlette TestClient dependency deprecation warning. It did not fail the tests.
 
@@ -306,11 +324,11 @@ docker compose -f compose.yml restart frontend
 
 Then refresh the browser.
 
-If Overview shows old readings or settings, click its Refresh button.
+Click the Devices Refresh button after changing an actuator state through the API.
 
-If Overview shows no devices, check that devices are assigned to zones in the selected location.
+If a transition returns 409, read the current state and allowed commands. Choose a legal transition.
 
-If no strategy is saved, use Automation to save one, then refresh Overview.
+If Overview shows old data, click its Refresh button. If devices are missing, check their zone assignments.
 
 If Docker cannot connect to its engine, start Docker Desktop and wait until it is running.
 
@@ -324,6 +342,8 @@ This stops services and retains the database volume.
 
 ## Earlier phases
 
+- [Phase 7 questions](phases/phase-07/questions.md)
+- [Facade notes](docs/patterns/facade.md)
 - [Phase 6 questions](phases/phase-06/questions.md)
 - [Strategy notes](docs/patterns/strategy.md)
 - [Phase 5 questions](phases/phase-05/questions.md)
@@ -343,4 +363,4 @@ The teacher's example projects were used as references. They are separate from t
 
 The Phase 1 foundation was compared with the course example, and some corrections were adapted from it.
 
-AI assistance was used for implementation guidance, debugging, test examples, and documentation drafts in Phases 4–7.
+AI assistance was used for implementation guidance, debugging, test examples, and documentation drafts in Phases 4–8.

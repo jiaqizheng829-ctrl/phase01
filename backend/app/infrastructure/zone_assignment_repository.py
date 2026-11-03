@@ -32,7 +32,9 @@ class ZoneAssignmentRepository:
                 )
 
                 if zone is None:
-                    raise AssignmentNotFoundError("Zone was not found.")
+                    raise AssignmentNotFoundError(
+                        "Zone was not found."
+                    )
 
             device = self.session.scalar(
                 select(DeviceRow)
@@ -41,7 +43,9 @@ class ZoneAssignmentRepository:
             )
 
             if device is None:
-                raise AssignmentNotFoundError("Device was not found.")
+                raise AssignmentNotFoundError(
+                    "Device was not found."
+                )
 
             device.zone_id = zone.id if zone is not None else None
             device.location_id = (
@@ -49,7 +53,9 @@ class ZoneAssignmentRepository:
             )
 
             self.session.flush()
-            result = DeviceRepository._to_device(device)
+            result = DeviceRepository(self.session).to_devices(
+                [device]
+            )[0]
             self.session.commit()
             return result
 
@@ -80,4 +86,6 @@ class ZoneAssignmentRepository:
             .order_by(DeviceRow.created_at, DeviceRow.id)
         ).all()
 
-        return [DeviceRepository._to_device(row) for row in rows]
+        return DeviceRepository(self.session).to_devices(
+            list(rows)
+        )

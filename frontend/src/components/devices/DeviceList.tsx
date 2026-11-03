@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { DeviceDto } from "../../api/devices";
+import type { ActuatorState, DeviceDto } from "../../api/devices";
 import type { LocationConfig } from "../../api/locations";
 
 type Props = {
@@ -7,6 +7,14 @@ type Props = {
   configurations?: LocationConfig[];
   assignmentsLoading?: boolean;
   onAssign?: (deviceId: string, zoneId: string | null) => Promise<void>;
+};
+
+const stateColors: Record<ActuatorState, string> = {
+  off: "bg-slate-700 text-slate-200",
+  idle: "bg-sky-950 text-sky-300",
+  running: "bg-emerald-950 text-emerald-300",
+  error: "bg-red-950 text-red-300",
+  maintenance: "bg-amber-950 text-amber-300",
 };
 
 export default function DeviceList({
@@ -55,6 +63,7 @@ export default function DeviceList({
           {error}
         </p>
       )}
+
       {notice && (
         <p role="status" className="mt-4 text-emerald-300">
           {notice}
@@ -84,10 +93,52 @@ export default function DeviceList({
                 <span className="rounded-full bg-emerald-950 px-3 py-1 text-xs text-emerald-300">
                   {device.role}
                 </span>
+
                 <span className="rounded-full bg-slate-700 px-3 py-1 text-xs text-slate-200">
                   {device.device_family}
                 </span>
+
+                {device.role === "actuator" && device.state && (
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs ${stateColors[device.state]}`}
+                  >
+                    State: {device.state}
+                  </span>
+                )}
               </div>
+
+              {device.role === "actuator" && (
+                <div className="mt-4 text-sm">
+                  {!device.state ? (
+                    <p className="text-amber-300">
+                      State unavailable. Refresh the device list.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-slate-300">
+                        Allowed commands
+                      </p>
+
+                      {device.allowed_commands.length > 0 ? (
+                        <ul className="mt-2 flex flex-wrap gap-2">
+                          {device.allowed_commands.map((command) => (
+                            <li
+                              key={command}
+                              className="rounded bg-slate-900 px-2 py-1 text-slate-200"
+                            >
+                              {command.replace(/_/g, " ")}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mt-1 text-slate-400">
+                          No commands available.
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
 
               {onAssign && (
                 <label className="mt-4 block text-sm text-slate-300">

@@ -14,6 +14,7 @@ from app.interfaces.api.devices import router as devices_router
 from app.interfaces.api.locations import router as locations_router
 from app.interfaces.api.automation import router as automation_router
 from app.interfaces.api.overview import router as overview_router
+from app.interfaces.api.actuator_states import router as actuator_states_router
 
 
 @asynccontextmanager
@@ -68,6 +69,7 @@ app.include_router(devices_router)
 app.include_router(locations_router)
 app.include_router(automation_router)
 app.include_router(overview_router)
+app.include_router(actuator_states_router)
 add_scalar_reference(app, route="/scalar")
 
 
