@@ -1,4 +1,5 @@
 from datetime import datetime
+from sqlalchemy import Text
 from decimal import Decimal
 from uuid import UUID
 
@@ -250,4 +251,35 @@ class ActuatorStateRow(Base):
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+class ActuatorExecutionLogRow(Base):
+    __tablename__ = "actuator_execution_log"
+
+    id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    device_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("devices.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    success: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+    )
+    policy_applied: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+    )
+    message: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
     )

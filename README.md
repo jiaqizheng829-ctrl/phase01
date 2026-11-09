@@ -1,4 +1,122 @@
-# Greenhouse Dashboard — Phase 8: State
+# Greenhouse Dashboard — Phase 9: Decorator
+
+## Phase 9 submission
+
+- [Phase 9 questions and answers](phases/phase-09/questions.md)
+- [Decorator pattern notes](docs/patterns/decorator.md)
+- [Phase 9 requirements](phases/phase-09/requirements.md)
+- [Phase 9 guided check](phases/phase-09/guided-check.md)
+
+## Phase 9 features
+
+I added two decorators around the simulation actuator adapter:
+
+LoggingDecorator -> MaxRunTimeDecorator -> SimulationActuatorAdapter
+
+ActuatorExecutionService builds this chain.
+
+- Logging saves successful and failed attempts in PostgreSQL.
+- MaxRunTime checks the saved Phase 8 state and updated_at.
+- Requests are blocked when the actuator has been running for at least 30 minutes.
+- Blocked requests do not reach the simulation adapter.
+- The dashboard shows the latest 20 execution records.
+
+This phase uses simulation only. Applying a command does not change
+the lifecycle state or control real hardware. Command names are not
+checked against allowed_commands in this phase.
+
+The runtime check runs when apply is called. It does not automatically
+stop a device after 30 minutes.
+
+## Phase 9 database
+
+The migration is `9258538de3ba`, following Phase 8 revision
+`16dd3ce021ac`.
+
+It adds actuator_execution_log with:
+
+- id
+- device_id
+- success
+- policy_applied
+- message
+- created_at
+
+Upgrade and check:
+
+```powershell
+docker compose -f compose.yml exec backend alembic upgrade head
+docker compose -f compose.yml exec backend alembic current
+```
+
+## Execution log API and UI
+
+GET /api/actuators/executions?limit=20 returns records newest first.
+The limit must be between 1 and 100.
+
+Open [Execution log](http://localhost:5173/dashboard#executions)
+and click Refresh to load current records.
+
+A successful attempt shows:
+
+- Success
+- Policies: logging
+- Message: —
+
+A runtime-blocked attempt shows:
+
+- Failed
+- Policies: maxRunTime, logging
+- Message: Max run time exceeded
+
+The panel also shows the device ID and local time.
+With no records, it shows "No execution attempts yet."
+
+Execution is currently triggered through ActuatorExecutionService
+in scripts and tests. The dashboard displays logs; it does not
+provide an execution button.
+
+## Phase 9 verification
+
+I manually checked that a successful simulated execution saves a log.
+
+I also temporarily set a simulated actuator to running with an
+updated_at timestamp 30 minutes earlier. The request was blocked,
+the inner adapter was not called, and the failure log was saved.
+The original state and timestamp were restored after the check.
+
+Both records appeared through the API and on the dashboard.
+
+Test results:
+
+- Decorator tests: 13 passed.
+- Execution database and API tests: 10 passed.
+- Full backend suite: 187 passed, 1 warning.
+- Container frontend TypeScript check and production build passed.
+
+The warning concerns a deprecated TestClient dependency.
+The editor's separate frontend diagnostics have not yet been resolved.
+
+Run the full backend suite against the test database:
+
+```powershell
+docker compose -f compose.yml exec -e DATABASE_URL=postgresql+psycopg2://greenhouse:greenhouse@db:5432/greenhouse_phase3_test backend alembic upgrade head
+
+docker compose -f compose.yml exec -e TEST_DATABASE_URL=postgresql+psycopg2://greenhouse:greenhouse@db:5432/greenhouse_phase3_test backend python -m pytest -q
+```
+
+Build the frontend:
+
+```powershell
+docker compose -f compose.yml exec frontend npm run build
+```
+
+## Previous implementation and operating instructions
+
+The following sections describe the existing Phase 8 functionality
+and shared application setup. Phase 8 revision and test results are
+historical; the current Phase 9 results are listed above.
+
 
 A greenhouse coursework project using React, FastAPI, and PostgreSQL.
 
@@ -363,4 +481,4 @@ The teacher's example projects were used as references. They are separate from t
 
 The Phase 1 foundation was compared with the course example, and some corrections were adapted from it.
 
-AI assistance was used for implementation guidance, debugging, test examples, and documentation drafts in Phases 4–8.
+AI assistance was used for implementation guidance, debugging, test examples, and documentation drafts in Phases 4–9.

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import ExecutionLogPanel from "../components/executions/ExecutionLogPanel";
 import DevicesSection from "../components/devices/DevicesSection";
 import ConfigurationSection from "../components/config/ConfigurationSection";
 import SensorCard from "../components/sensors/SensorCard";
@@ -156,6 +157,7 @@ export default function DashboardPage() {
       <StrategyPanel refreshKey={configurationRefresh} />
 
       <OverviewPanel refreshKey={configurationRefresh} />
+      <ExecutionLogPanel />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {laterSections.map((section) => (

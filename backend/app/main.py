@@ -1,6 +1,7 @@
 import asyncio
 import os
 from contextlib import asynccontextmanager
+from app.interfaces.api.actuator_executions import router as actuator_executions_router
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -70,6 +71,7 @@ app.include_router(locations_router)
 app.include_router(automation_router)
 app.include_router(overview_router)
 app.include_router(actuator_states_router)
+app.include_router(actuator_executions_router)
 add_scalar_reference(app, route="/scalar")
 
 
