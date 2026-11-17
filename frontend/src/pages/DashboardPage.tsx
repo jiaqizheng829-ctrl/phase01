@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import ExecutionLogPanel from "../components/executions/ExecutionLogPanel";
+import CommandPanel from "../components/commands/CommandPanel";
 import DevicesSection from "../components/devices/DevicesSection";
 import ConfigurationSection from "../components/config/ConfigurationSection";
 import SensorCard from "../components/sensors/SensorCard";
@@ -12,13 +13,9 @@ import {
   type Sensor,
 } from "../api/sensors";
 
-const laterSections = [
-  { id: "controls", title: "Controls" },
-  { id: "events", title: "Events" },
-];
-
 export default function DashboardPage() {
   const [configurationRefresh, setConfigurationRefresh] = useState(0);
+  const [executionRefresh, setExecutionRefresh] = useState(0);
   const [sensors, setSensors] = useState<Sensor[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState<string | null>(null);
@@ -26,6 +23,11 @@ export default function DashboardPage() {
 
   function refreshConfiguration() {
     setConfigurationRefresh((current) => current + 1);
+  }
+
+  function handleCommandChanged() {
+    refreshConfiguration();
+    setExecutionRefresh((current) => current + 1);
   }
 
   async function loadSensors() {
@@ -157,24 +159,25 @@ export default function DashboardPage() {
       <StrategyPanel refreshKey={configurationRefresh} />
 
       <OverviewPanel refreshKey={configurationRefresh} />
-      <ExecutionLogPanel />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {laterSections.map((section) => (
-          <section
-            key={section.id}
-            id={section.id}
-            className="rounded-xl border border-slate-700 bg-slate-900 p-5"
-          >
-            <h2 className="text-xl font-semibold text-slate-100">
-              {section.title}
-            </h2>
-            <p className="mt-3 text-slate-400">
-              This feature is not implemented yet.
-            </p>
-          </section>
-        ))}
-      </div>
+      <ExecutionLogPanel key={executionRefresh} />
+
+      <CommandPanel
+        refreshKey={configurationRefresh}
+        onChanged={handleCommandChanged}
+      />
+
+      <section
+        id="events"
+        className="rounded-xl border border-slate-700 bg-slate-900 p-5"
+      >
+        <h2 className="text-xl font-semibold text-slate-100">
+          Events
+        </h2>
+        <p className="mt-3 text-slate-400">
+          This feature is not implemented yet.
+        </p>
+      </section>
     </div>
   );
 }

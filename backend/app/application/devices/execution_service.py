@@ -8,13 +8,10 @@ from sqlalchemy.orm import Session
 from app.infrastructure.actuator_execution_repository import (
     ActuatorExecutionRepository,
 )
-from app.infrastructure.adapters.actuators.logging import (
-    LoggingDecorator,
+from app.infrastructure.adapters.actuators.factory import (
+    build_actuator_port,
 )
-from app.infrastructure.adapters.actuators.max_run_time import (
-    MaxRunTimeDecorator,
-    utc_now,
-)
+from app.infrastructure.adapters.actuators.max_run_time import utc_now
 from app.infrastructure.adapters.actuators.simulation import (
     SimulationActuatorAdapter,
 )
@@ -28,18 +25,13 @@ class ActuatorExecutionService:
         clock: Callable[[], datetime] = utc_now,
     ) -> None:
         self.repository = ActuatorExecutionRepository(session)
-
         self.adapter = SimulationActuatorAdapter()
 
-        limited = MaxRunTimeDecorator(
+        self.actuator = build_actuator_port(
             self.adapter,
             self.repository.load_state,
-            clock=clock,
-        )
-
-        self.actuator = LoggingDecorator(
-            limited,
             self.repository.save_log,
+            clock=clock,
         )
 
     def apply(
@@ -48,8 +40,5 @@ class ActuatorExecutionService:
         command: str,
         payload: dict[str, Any],
     ) -> None:
-        # Reject missing devices and sensors before execution.
         self.repository.load_state(device_id)
-
-        # Logging wraps the runtime check so blocked attempts are saved.
         self.actuator.apply(device_id, command, payload)

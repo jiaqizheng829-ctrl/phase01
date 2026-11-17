@@ -10,11 +10,18 @@ from sqlalchemy.orm import Session
 from app.infrastructure.models import ActuatorStateRow
 
 
+# Phase 8 state endpoints retain their lifecycle command names.
 IDLE_COMMANDS = {
     "start",
     "turn_off",
     "enter_maintenance",
     "report_error",
+}
+
+# Device DTOs expose the Phase 10 executable commands.
+DEVICE_IDLE_COMMANDS = {
+    "water_pump": {"start_pump"},
+    "grow_light": {"set_light_level"},
 }
 
 
@@ -92,7 +99,9 @@ def test_new_actuators_have_persisted_idle_states(api, family):
 
         if device["role"] == "actuator":
             assert device["state"] == "idle"
-            assert set(device["allowed_commands"]) == IDLE_COMMANDS
+            assert set(device["allowed_commands"]) == (
+                DEVICE_IDLE_COMMANDS[device["device_type"]]
+            )
             assert stored_state(connection, device_id) == "idle"
 
             response = client.get(
@@ -139,10 +148,7 @@ def test_transition_is_saved_and_visible_in_new_requests(api):
         if device["id"] == device_id
     )
     assert saved["state"] == "running"
-    assert set(saved["allowed_commands"]) == {
-        "stop",
-        "report_error",
-    }
+    assert set(saved["allowed_commands"]) == {"stop_pump"}
 
     # Other actuators must not change.
     for device in devices:

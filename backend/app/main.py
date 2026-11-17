@@ -1,7 +1,6 @@
 import asyncio
 import os
 from contextlib import asynccontextmanager
-from app.interfaces.api.actuator_executions import router as actuator_executions_router
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,19 +8,22 @@ from scalar_fastapi import add_scalar_reference
 
 from app.infrastructure.sampling_runner import run_sampling_loop
 from app.infrastructure.settings import settings
-from app.interfaces.api.health import router as health_router
-from app.interfaces.api.sensors import router as sensors_router
-from app.interfaces.api.devices import router as devices_router
-from app.interfaces.api.locations import router as locations_router
-from app.interfaces.api.automation import router as automation_router
-from app.interfaces.api.overview import router as overview_router
+from app.interfaces.api.actuator_executions import (
+    router as actuator_executions_router,
+)
 from app.interfaces.api.actuator_states import router as actuator_states_router
+from app.interfaces.api.automation import router as automation_router
+from app.interfaces.api.commands import router as commands_router
+from app.interfaces.api.devices import router as devices_router
+from app.interfaces.api.health import router as health_router
+from app.interfaces.api.locations import router as locations_router
+from app.interfaces.api.overview import router as overview_router
+from app.interfaces.api.sensors import router as sensors_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # API tests use a separate test database and drive the sampler directly.
-    # Do not start a background sampler against the normal database in tests.
+    # Tests use a separate database and drive the sampler directly.
     sampler_enabled = (
         os.environ.get("SIMULATION_SAMPLER_ENABLED", "true").lower()
         in {"true", "1", "yes"}
@@ -72,6 +74,8 @@ app.include_router(automation_router)
 app.include_router(overview_router)
 app.include_router(actuator_states_router)
 app.include_router(actuator_executions_router)
+app.include_router(commands_router)
+
 add_scalar_reference(app, route="/scalar")
 
 

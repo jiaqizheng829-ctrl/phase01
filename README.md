@@ -1,4 +1,82 @@
-# Greenhouse Dashboard — Phase 9: Decorator
+# Greenhouse Dashboard — Phase 10: Command
+
+## Phase 10 submission
+
+- [Questions and answers](phases/phase-10/questions.md)
+- [Command pattern notes](docs/patterns/command.md)
+- [Requirements](phases/phase-10/requirements.md)
+- [Guided check](phases/phase-10/guided-check.md)
+
+## Phase 10 implementation
+
+StartPumpCommand, StopPumpCommand, and SetLightLevelCommand represent
+actuator requests. CommandInvoker creates commands through a registry.
+
+CommandService locks and checks the saved actuator state before execution.
+Illegal commands are logged as rejected without reaching the adapter.
+Allowed commands execute through the Phase 9 logging and runtime decorators.
+
+Successful execution updates state through ActuatorContext.transition
+only when the target differs. Updating a running light does not reset
+its state timestamp.
+
+Command logs, execution logs, and state changes share one transaction.
+Runtime failures preserve both failure logs without changing state.
+
+Actuation is simulated. Commands execute synchronously.
+Queues, undo, automatic retries, and hardware control are not implemented.
+
+## Command API
+
+POST /api/commands accepts command_type, device_id, and optional payload.
+
+Supported types:
+- start_pump
+- stop_pump
+- set_light_level, with a payload such as {"level": 1}
+
+Responses:
+- 200: success or failed, with the command log row.
+- 409: rejected, with the same log row shape.
+- 400: unknown command type; no command log is written.
+- 404: missing device or non-actuator device.
+
+GET /api/commands?limit=50 lists history newest first.
+The limit must be between 1 and 200.
+
+[Scalar API documentation](http://localhost:8000/scalar)
+
+## Controls and history
+
+[Open Controls](http://localhost:5173/dashboard#controls)
+
+Buttons respect allowed_commands. The light level defaults to 1.
+After each attempt, actuator states and command history are refreshed.
+The history table displays the latest 50 attempts.
+
+The runtime guard blocks attempts after at least 30 minutes of running,
+including stop attempts under the current policy.
+It does not automatically stop an actuator.
+
+Device DTOs expose Phase 10 command names. Existing Phase 8 state
+endpoints retain their lifecycle command names.
+
+## Database and verification
+
+Migration 4008dc9f648c follows 9258538de3ba and creates command_log.
+
+The backend suite passed: 205 tests, one dependency deprecation warning.
+This includes six command-object tests and twelve command API tests.
+
+Frontend TypeScript checking and production build passed in Docker.
+Pump start/stop and history were checked through the UI.
+
+## Previous phase documentation
+
+The following sections describe earlier phase behavior.
+The sections above describe the current command execution and controls.
+
+## Phase 9: Decorator
 
 ## Phase 9 submission
 
@@ -481,4 +559,4 @@ The teacher's example projects were used as references. They are separate from t
 
 The Phase 1 foundation was compared with the course example, and some corrections were adapted from it.
 
-AI assistance was used for implementation guidance, debugging, test examples, and documentation drafts in Phases 4–9.
+AI assistance was used for implementation guidance, debugging, test examples, and documentation drafts in Phases 4–10.

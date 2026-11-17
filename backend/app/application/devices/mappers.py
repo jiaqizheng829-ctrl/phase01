@@ -13,7 +13,10 @@ def to_device_dto(device: Device) -> DeviceDto:
     allowed_commands: list[str] = []
 
     if device.role == "actuator" and device.state is not None:
-        context = ActuatorContext(device.state)
+        context = ActuatorContext(
+            device.state,
+            device_type=device.device_type,
+        )
         state = context.state
         allowed_commands = context.allowed_commands()
 
