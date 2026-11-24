@@ -4,8 +4,10 @@ from sqlalchemy.orm import Session
 from app.application.commands.dto import CommandLogDto, CommandRequest
 from app.application.commands.service import CommandService
 from app.domain.commands.invoker import UnknownCommandError
+from app.domain.events.bus import EventBus
 from app.infrastructure.actuator_state_repository import ActuatorNotFoundError
 from app.infrastructure.db import get_session
+from app.interfaces.api.event_dependencies import get_event_bus
 
 
 router = APIRouter(prefix="/api/commands", tags=["commands"])
@@ -27,9 +29,10 @@ def execute_command(
     body: CommandRequest,
     response: Response,
     session: Session = Depends(get_session),
+    bus: EventBus = Depends(get_event_bus),
 ) -> CommandLogDto:
-    """Execute a command. Success and execution failure both return HTTP 200."""
-    service = CommandService(session)
+    """Execute a command. Success and execution failure return HTTP 200."""
+    service = CommandService(session, bus=bus)
 
     try:
         result = service.execute(body)

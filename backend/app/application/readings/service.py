@@ -4,6 +4,8 @@ from uuid import UUID
 
 from app.application.readings.dto import ReadingDto, to_reading_dto
 from app.domain.devices.entity import Device
+from app.domain.events.bus import EventBus
+from app.domain.events.events import ReadingCreated
 from app.domain.sensors.ports import SensorPort
 from app.domain.sensors.reading import Reading, ReadingError
 
@@ -35,10 +37,20 @@ class ReadingIngest:
         devices: DeviceReader,
         readings: ReadingStore,
         select_adapter: Callable[[Device], SensorPort],
+        *,
+        bus: EventBus | None = None,
+        is_tracking_enabled: Callable[[UUID], bool] | None = None,
     ):
+        if bus is not None and is_tracking_enabled is None:
+            raise ValueError(
+                "is_tracking_enabled is required when a bus is supplied."
+            )
+
         self.devices = devices
         self.readings = readings
         self.select_adapter = select_adapter
+        self.bus = bus
+        self.is_tracking_enabled = is_tracking_enabled
 
     def take_reading(self, device_id: UUID) -> ReadingDto:
         device = self._get_sensor(device_id)
@@ -71,8 +83,34 @@ class ReadingIngest:
                 f"Unsupported sensor type: {device.device_type}"
             )
 
+        should_publish = (
+            self.bus is not None
+            and self.is_tracking_enabled is not None
+            and self.is_tracking_enabled(device_id)
+        )
+
+        zone_id = device.zone_id
+        location_id = device.location_id if zone_id is not None else None
+
+        # ReadingRepository.insert commits before returning.
+        # Tracking off still permits storing a supplied reading.
         saved = self.readings.insert(reading)
-        return to_reading_dto(saved)
+        result = to_reading_dto(saved)
+
+        if should_publish and self.bus is not None:
+            self.bus.publish(
+                ReadingCreated(
+                    device_id=saved.device_id,
+                    location_id=location_id,
+                    zone_id=zone_id,
+                    value=float(saved.value),
+                    unit=saved.unit,
+                    source=saved.source,
+                    recorded_at=saved.recorded_at,
+                )
+            )
+
+        return result
 
     def list_readings(
         self,

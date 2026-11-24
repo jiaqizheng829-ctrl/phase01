@@ -326,3 +326,64 @@ class CommandLogRow(Base):
         nullable=False,
         server_default=func.now(),
     )
+
+
+class AlertRow(Base):
+    __tablename__ = "alerts"
+    __table_args__ = (
+        CheckConstraint(
+            "severity IN ('info', 'warning', 'critical')",
+            name="ck_alerts_severity",
+        ),
+        CheckConstraint(
+            "status IN ('active', 'resolved')",
+            name="ck_alerts_status",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    location_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("locations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    zone_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("zones.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    device_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("devices.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    severity: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+    )
+    message: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+    event_type: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        server_default=text("'active'"),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    acknowledged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )

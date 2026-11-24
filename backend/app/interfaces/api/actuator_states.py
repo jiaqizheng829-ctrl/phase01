@@ -9,11 +9,14 @@ from app.application.devices.state_dto import (
 )
 from app.application.devices.state_service import ActuatorStateService
 from app.domain.actuators.state import IllegalTransitionError
+from app.domain.events.bus import EventBus
 from app.infrastructure.actuator_state_repository import (
     ActuatorNotFoundError,
     ActuatorStateRepository,
 )
 from app.infrastructure.db import get_session
+from app.infrastructure.models import DeviceRow
+from app.interfaces.api.event_dependencies import get_event_bus
 
 
 router = APIRouter(
@@ -24,9 +27,25 @@ router = APIRouter(
 
 def get_state_service(
     session: Session = Depends(get_session),
+    bus: EventBus = Depends(get_event_bus),
 ) -> ActuatorStateService:
+    def load_assignment(
+        device_id: UUID,
+    ) -> tuple[UUID | None, UUID | None]:
+        device = session.get(DeviceRow, device_id)
+
+        if device is None or device.role != "actuator":
+            raise ActuatorNotFoundError("Actuator not found.")
+
+        if device.zone_id is None:
+            return None, None
+
+        return device.location_id, device.zone_id
+
     return ActuatorStateService(
-        ActuatorStateRepository(session)
+        ActuatorStateRepository(session),
+        bus=bus,
+        load_assignment=load_assignment,
     )
 
 

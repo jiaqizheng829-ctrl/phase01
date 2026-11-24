@@ -1,3 +1,4 @@
+from app.interfaces.api.alerts import router as alerts_router
 import asyncio
 import os
 from contextlib import asynccontextmanager
@@ -75,6 +76,7 @@ app.include_router(overview_router)
 app.include_router(actuator_states_router)
 app.include_router(actuator_executions_router)
 app.include_router(commands_router)
+app.include_router(alerts_router)
 
 add_scalar_reference(app, route="/scalar")
 

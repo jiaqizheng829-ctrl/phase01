@@ -9,6 +9,8 @@ from app.application.commands.dto import CommandLogDto, CommandRequest
 from app.domain.actuators.context import ActuatorContext
 from app.domain.actuators.ports import ActuatorPort
 from app.domain.commands.invoker import CommandInvoker
+from app.domain.events.bus import EventBus
+from app.domain.events.events import ActuatorStateChanged, CommandFailed
 from app.infrastructure.actuator_execution_repository import (
     ActuatorExecutionRepository,
 )
@@ -34,8 +36,10 @@ class CommandService:
         *,
         adapter: ActuatorPort | None = None,
         clock: Callable[[], datetime] = utc_now,
+        bus: EventBus | None = None,
     ) -> None:
         self.session = session
+        self.bus = bus
         self.states = ActuatorStateRepository(session)
         self.logs = CommandLogRepository(session)
         self.executions = ActuatorExecutionRepository(session)
@@ -57,7 +61,6 @@ class CommandService:
         policy_applied: list[str],
         message: str | None,
     ) -> None:
-        # The command service commits both logs and the state together.
         self.session.add(
             ActuatorExecutionLogRow(
                 device_id=device_id,
@@ -85,21 +88,36 @@ class CommandService:
         return result
 
     def execute(self, request: CommandRequest) -> CommandLogDto:
+        pending_events: list[object] = []
+
         try:
-            return self._execute(request)
+            result = self._execute(request, pending_events)
         except Exception:
             self.session.rollback()
             raise
 
-    def _execute(self, request: CommandRequest) -> CommandLogDto:
-        # Validate the actuator and lock its state before checking permissions.
+        # Publish only after the command transaction has committed.
+        if self.bus is not None:
+            for event in pending_events:
+                self.bus.publish(event)
+
+        return result
+
+    def _execute(
+        self,
+        request: CommandRequest,
+        pending_events: list[object],
+    ) -> CommandLogDto:
         saved_state = self.states.get_state_for_update(request.device_id)
         device = self.session.get(DeviceRow, request.device_id)
 
         if device is None:
             raise RuntimeError("The locked actuator could not be loaded.")
 
-        # Unknown command types raise before any command log is added.
+        # Capture assignment before commit expires ORM attributes.
+        zone_id = device.zone_id
+        location_id = device.location_id if zone_id is not None else None
+
         command = self.invoker.create(
             request.command_type,
             request.device_id,
@@ -124,16 +142,31 @@ class CommandService:
         try:
             self.invoker.execute(command, self.port)
         except SQLAlchemyError:
-            # Database errors must roll back instead of becoming device failures.
             raise
         except Exception as exc:
-            # Keep the failure log written by the logging decorator.
-            # No actuator state is changed on this path.
-            return self._finish(request, "failed", str(exc))
+            message = str(exc)
+            pending_events.append(
+                CommandFailed(
+                    device_id=request.device_id,
+                    location_id=location_id,
+                    zone_id=zone_id,
+                    command_type=request.command_type,
+                    message=message,
+                )
+            )
+            return self._finish(request, "failed", message)
 
         if command.target_state != context.state:
             context.transition(command.target_state)
             self.states.save_state(request.device_id, context.state)
+            pending_events.append(
+                ActuatorStateChanged(
+                    device_id=request.device_id,
+                    location_id=location_id,
+                    zone_id=zone_id,
+                    state=context.state,
+                )
+            )
 
         return self._finish(request, "success")
 

@@ -11,13 +11,11 @@ from app.application.readings.service import (
     ReadingIngest,
 )
 from app.application.sensor_service import SensorService
+from app.domain.events.bus import EventBus
 from app.domain.sensors.reading import ReadingError
-from app.infrastructure.adapters.sensors.selector import (
-    select_sensor_adapter,
-)
 from app.infrastructure.db import get_session
-from app.infrastructure.device_repository import DeviceRepository
-from app.infrastructure.reading_repository import ReadingRepository
+from app.infrastructure.reading_dependencies import build_reading_ingest
+from app.interfaces.api.event_dependencies import get_event_bus
 
 
 router = APIRouter(prefix="/api/sensors", tags=["sensors"])
@@ -43,12 +41,9 @@ class SensorResponse(BaseModel):
 
 def get_reading_service(
     session: Session = Depends(get_session),
+    bus: EventBus = Depends(get_event_bus),
 ) -> ReadingIngest:
-    return ReadingIngest(
-        devices=DeviceRepository(session),
-        readings=ReadingRepository(session),
-        select_adapter=select_sensor_adapter,
-    )
+    return build_reading_ingest(session, bus)
 
 
 @router.get("", response_model=list[SensorResponse])

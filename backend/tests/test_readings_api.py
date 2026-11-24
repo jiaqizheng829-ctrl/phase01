@@ -38,6 +38,18 @@ def api():
             previous_overrides = app.dependency_overrides.copy()
             app.dependency_overrides[get_session] = test_session
 
+            from app.infrastructure.event_bus import build_event_bus
+            from app.interfaces.api.event_dependencies import get_event_bus
+
+            def subscriber_session():
+                return Session(
+                    bind=connection,
+                    join_transaction_mode="create_savepoint",
+                )
+
+            test_bus = build_event_bus(subscriber_session)
+            app.dependency_overrides[get_event_bus] = lambda: test_bus
+
             try:
                 with TestClient(app) as client:
                     yield client, connection

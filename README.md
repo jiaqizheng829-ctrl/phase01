@@ -1,4 +1,106 @@
-# Greenhouse Dashboard — Phase 10: Command
+# Greenhouse Dashboard — Phase 11: Observer
+
+## Phase 11 submission
+
+- [Questions and answers](phases/phase-11/questions.md)
+- [Observer pattern notes](docs/patterns/observer.md)
+- [Requirements](phases/phase-11/requirements.md)
+- [Guided check](phases/phase-11/guided-check.md)
+
+## Phase 11 implementation
+
+An in-process EventBus connects publishers to subscribers.
+Handlers run synchronously in registration order.
+A handler exception is logged, and later handlers still run.
+
+ReadingIngest saves readings and publishes reading.created only when
+tracking_enabled is true. Manual reads and automatic sampling share
+this ingest path. Explicitly ingested readings are still saved when
+tracking is disabled, but no reading event is published.
+
+MoistureThresholdSubscriber publishes threshold.crossed when a vwc
+reading is strictly below its assigned zone's low threshold.
+Equal or higher readings and unassigned readings do not trigger it.
+
+CommandService publishes command.failed after persisting an execution
+failure. Rejected commands do not produce command-failure alerts.
+Successful saved state changes publish state.changed.
+
+Publishers do not import the alerts repository or the UI.
+Alert persistence is connected through subscribers in the composition root.
+
+## Persistent alerts
+
+AlertPersistenceSubscriber stores these alerts:
+
+| Event | Severity | Message |
+| --- | --- | --- |
+| threshold.crossed | warning | Moisture below zone low |
+| command.failed | warning | Original execution failure message |
+| state.changed, only for error | critical | Actuator entered error |
+
+Alerts are stored in PostgreSQL and survive browser refreshes.
+Device, location, and zone references are nullable.
+Foreign keys use ON DELETE SET NULL.
+
+Migration d84312726da4 follows 4008dc9f648c and creates the alerts table.
+
+## Alerts API and dashboard
+
+GET /api/alerts returns alerts newest first.
+
+Supported query parameters:
+
+- status: active (default), resolved, or all. Invalid values return 400.
+- location_id and zone_id: optional UUID filters.
+- since: optional inclusive creation-time filter.
+- limit: 1–200, default 50.
+
+[Open Events](http://localhost:5173/dashboard#events)
+
+The Events panel polls every five seconds and provides location and
+zone filters, severity badges, a Refresh button, and a last-updated time.
+
+services/realtime.ts is a no-op stub for Phase 12.
+WebSocket delivery and AlertCreated publication are not implemented here.
+
+## Delivery and transaction limits
+
+Events are published after the originating data is committed.
+Alert persistence uses a separate session and transaction.
+
+The bus is local to one backend process. It does not provide a durable
+queue, retries, replay, or an outbox. A subscriber failure does not undo
+the original action, and an alert can be missed if delivery fails.
+
+Every qualifying low-moisture reading can create an alert.
+Deduplication and automatic alert resolution are not implemented.
+Actuator execution remains simulated.
+
+## Phase 11 verification
+
+- Full backend suite: 232 passed, 1 dependency deprecation warning.
+- Event bus tests: 6 passed.
+- Reading event tests: 5 passed.
+- Alerts API and integration tests: 16 passed.
+- Frontend TypeScript checking and production build passed.
+- A tracked low-moisture reading produced a persistent warning alert.
+- An actuator error transition produced a critical alert through the API.
+- A runtime-limited command produced a warning with null assignments.
+- Failed execution preserved actuator state and timestamp.
+- Temporary actuator changes were restored after manual checks.
+
+The dependency warning did not fail the tests.
+
+frontend/.dockerignore excludes node_modules and dist from the build
+context to avoid copying local dependency files into the Docker build.
+
+## Historical phase documentation
+
+The sections below retain earlier implementation notes and test counts.
+Phase 11 behavior and verification are described above.
+
+## Phase 10: Command
 
 ## Phase 10 submission
 
@@ -139,7 +241,7 @@ A successful attempt shows:
 
 - Success
 - Policies: logging
-- Message: —
+- Message: 鈥?
 
 A runtime-blocked attempt shows:
 
@@ -403,7 +505,7 @@ Evaluation uses the latest saved readings. It does not control actuator lifecycl
 - Readings are saved in `sensor_readings`.
 - Enabled simulation sensors are sampled automatically.
 
-Moisture uses `vwc` on a 0–1 scale. Light uses `lux`.
+Moisture uses `vwc` on a 0鈥? scale. Light uses `lux`.
 
 On sensor cards:
 
@@ -559,4 +661,4 @@ The teacher's example projects were used as references. They are separate from t
 
 The Phase 1 foundation was compared with the course example, and some corrections were adapted from it.
 
-AI assistance was used for implementation guidance, debugging, test examples, and documentation drafts in Phases 4–10.
+AI assistance was used for implementation guidance, debugging, test examples, and documentation drafts in Phases 4鈥?0.

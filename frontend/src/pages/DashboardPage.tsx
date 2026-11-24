@@ -1,3 +1,4 @@
+import EventFeed from "../components/alerts/EventFeed";
 import { useEffect, useState } from "react";
 
 import ExecutionLogPanel from "../components/executions/ExecutionLogPanel";
@@ -167,17 +168,7 @@ export default function DashboardPage() {
         onChanged={handleCommandChanged}
       />
 
-      <section
-        id="events"
-        className="rounded-xl border border-slate-700 bg-slate-900 p-5"
-      >
-        <h2 className="text-xl font-semibold text-slate-100">
-          Events
-        </h2>
-        <p className="mt-3 text-slate-400">
-          This feature is not implemented yet.
-        </p>
-      </section>
+      <EventFeed refreshKey={configurationRefresh} />
     </div>
   );
 }
